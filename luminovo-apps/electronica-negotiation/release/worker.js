@@ -358,7 +358,7 @@ ${items.map((n, i) => `[${i}] ${n.date?.slice(0, 10) ?? ""} ${n.source}: ${n.tit
   try {
     const res = await complete({
       model: "fast",
-      instructions: "You prepare a procurement buyer for a supplier meeting. Use only the headlines given; never invent news. Keep the opener warm and specific, no flattery, no clich\xE9s, US English. The hook ties the news to volume, pricing or lead times.",
+      instructions: `You prepare a procurement buyer for a supplier meeting. Use only the headlines given; never invent news. Keep the opener warm and specific, no flattery, no clich\xE9s, US English. The hook ties the news to volume, pricing or lead times. Money is in ${String(facts.currency ?? "EUR")}; round it to three significant figures (for example \u20AC107M, \u20AC8.4M, \u20AC920k).`,
       prompt,
       schema: NEWS_SCHEMA,
       maxOutputTokens: 900
@@ -412,7 +412,7 @@ ${JSON.stringify(input.offFloor ?? []).slice(0, 3e3)}
 Hall layout: row A is north, row B in the middle, row C south; halls 1 to 6 run west to east. Entrance West is next to B0/A1/C1, Entrance East next to A6/B6/C6.`;
   const res = await complete({
     model: "balanced",
-    instructions: `You plan a buyer's day at electronica. Rank the stands by negotiation value: project spend at stake, lines the supplier could win if they move a little on price (contestable volume and how much of it is within 10%), lines where a competitor is cheaper and they should match, cross-project spend that gives leverage, and how dependent the project is on them. Then order the route so the highest-value stops come first but the walk stays efficient (start at Entrance West, avoid crossing the fairground twice). Include every stand worth more than a courtesy visit, at most 8. Give each stop a concrete ask with a number. Put suppliers without a stand, or not worth a visit, in remote with a follow-up action. Use the supplier names exactly as given. US English, plain and direct.`,
+    instructions: `You plan a buyer's day at electronica. Rank the stands by negotiation value: project spend at stake, lines the supplier could win if they move a little on price (contestable volume and how much of it is within 10%), lines where a competitor is cheaper and they should match, cross-project spend that gives leverage, and how dependent the project is on them. Then order the route so the highest-value stops come first but the walk stays efficient (start at Entrance West, avoid crossing the fairground twice). Include every stand worth more than a courtesy visit, at most 8. Give each stop a concrete ask with a number. Do not repeat the hall or stand in the objective; the card shows it. Round money to three significant figures with the currency symbol (for example \u20AC107M, \u20AC8.4M, \u20AC920k). Put suppliers without a stand, or not worth a visit, in remote with a follow-up action. Use the supplier names exactly as given. US English, plain and direct.`,
     prompt,
     schema: PLAN_SCHEMA,
     maxOutputTokens: 2500
@@ -441,7 +441,7 @@ var BRIEF_SCHEMA = {
 async function brief(input) {
   const res = await complete({
     model: "balanced",
-    instructions: "You are a senior electronics procurement negotiator preparing a buyer for a face-to-face meeting at electronica 2026. Build the brief only from the numbers given; cite them. The strongest move is usually volume for price: offer the lines they are close to winning in exchange for a price move, and ask them to match competitors on lines they hold but are not cheapest on. Be specific, short, US English.",
+    instructions: "You are a senior electronics procurement negotiator preparing a buyer for a face-to-face meeting at electronica 2026. Build the brief only from the numbers given; cite them. The strongest move is usually volume for price: offer the lines they are close to winning in exchange for a price move, and ask them to match competitors on lines they hold but are not cheapest on. Be specific, short, US English. Round money to three significant figures with the currency symbol (for example \u20AC107M, \u20AC8.4M, \u20AC920k).",
     prompt: JSON.stringify(input).slice(0, 2e4),
     schema: BRIEF_SCHEMA,
     maxOutputTokens: 2e3

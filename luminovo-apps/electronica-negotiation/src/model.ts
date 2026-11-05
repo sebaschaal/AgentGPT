@@ -95,9 +95,12 @@ export function hallSpend(suppliers: SupplierSpend[]): HallSpend[] {
 export interface Held {
     line: Line;
     award: number; // what we pay them today on this line
-    alt?: Option; // best competing offer
+    alt?: Option; // best competing offer, approved suppliers first
+    altApproved: boolean;
     cushion: number | null; // alt / award - 1; negative = a competitor is cheaper
 }
+
+const approved = (o: Option) => !o.tags.includes('SupplierNotApproved');
 
 export interface Contestable {
     line: Line;
@@ -134,16 +137,17 @@ export function analyse(supplier: string, lines: Line[], comp: Map<string, CompL
         const c = comp.get(line.id);
         const isHeld = key(line.supplier) === k;
         if (!c) {
-            if (isHeld && line.total) held.push({ line, award: line.total, cushion: null });
+            if (isHeld && line.total) held.push({ line, award: line.total, cushion: null, altApproved: false });
             continue;
         }
         covered++;
         const opts = c.options;
         if (isHeld) {
-            const alt = opts.filter((o) => key(o.supplier) !== k).sort((a, b) => a.total - b.total)[0];
+            const others = opts.filter((o) => key(o.supplier) !== k).sort((a, b) => a.total - b.total);
+            const alt = others.find(approved) ?? others[0];
             const award = line.total || opts.find((o) => key(o.supplier) === k)?.total || 0;
             if (!award) continue;
-            held.push({ line, award, alt, cushion: alt ? alt.total / award - 1 : null });
+            held.push({ line, award, alt, altApproved: !!alt && approved(alt), cushion: alt ? alt.total / award - 1 : null });
             continue;
         }
         if (!line.total) continue;
@@ -154,7 +158,9 @@ export function analyse(supplier: string, lines: Line[], comp: Map<string, CompL
     contestable.sort((a, b) => a.move - b.move);
     notQuoted.sort((a, b) => b.award - a.award);
     held.sort((a, b) => b.award - a.award);
-    const matchAsks = held.filter((h) => h.cushion !== null && h.cushion < -0.001).sort((a, b) => a.cushion! - b.cushion!);
+    const matchAsks = held
+        .filter((h) => h.cushion !== null && h.cushion < -0.001)
+        .sort((a, b) => b.award - b.alt!.total - (a.award - a.alt!.total));
     const defend = held.filter((h) => h.cushion !== null && h.cushion >= -0.001 && h.cushion < 0.05);
     return {
         supplier,
@@ -204,12 +210,27 @@ export function curve(a: SupplierAnalysis, mode: Mode, max = 0.3, step = 0.0025)
     return pts;
 }
 
-export function sweetSpot(points: SimPoint[]): SimPoint {
+export function bestStart(a: SupplierAnalysis): { mode: Mode; d: number } {
+    const across = sweetSpot(curve(a, 'across'), 'across');
+    if (across.net > 0 && across.d > 0) return { mode: 'across', d: across.d };
+    const targeted = sweetSpot(curve(a, 'targeted'), 'targeted');
+    if (targeted.net > 0 && targeted.d > 0) return { mode: 'targeted', d: targeted.d };
+    return { mode: 'across', d: 0.05 };
+}
+
+// Across the board: the move that maximises their net revenue change.
+// Targeted: net only grows with the discount, so pick the knee, the move that wins the most volume per point of discount.
+export function sweetSpot(points: SimPoint[], mode: Mode = 'across'): SimPoint {
+    if (mode === 'targeted') {
+        const cands = points.filter((p) => p.d >= 0.01 && p.d <= 0.2 && p.gained > 0);
+        if (!cands.length) return points[0];
+        return cands.reduce((best, p) => (p.gained / p.d > best.gained / best.d + 1e-6 ? p : best), cands[0]);
+    }
     return points.reduce((best, p) => (p.net > best.net + 1e-6 ? p : best), points[0]);
 }
 
 export const BUCKETS = [
-    { id: 'blocked', label: 'Already cheapest', test: (m: number) => m <= 0 },
+    { id: 'blocked', label: 'Cheapest, not awarded', test: (m: number) => m <= 0 },
     { id: 'b5', label: 'Within 5%', test: (m: number) => m > 0 && m <= 0.05 },
     { id: 'b10', label: '5–10%', test: (m: number) => m > 0.05 && m <= 0.1 },
     { id: 'b20', label: '10–20%', test: (m: number) => m > 0.1 && m <= 0.2 },

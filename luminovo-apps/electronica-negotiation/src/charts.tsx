@@ -7,28 +7,31 @@ interface ConcessionProps {
     d: number;
     onChange: (d: number) => void;
     sweet: SimPoint;
-    base: number;
     max: number;
+    sweetLabel: string;
 }
 
 const W = 680;
-const H = 280;
-const PAD = { l: 64, r: 18, t: 18, b: 34 };
+const H = 300;
+const PAD = { l: 64, r: 18, t: 22, b: 34 };
 
-export function ConcessionChart({ points, d, onChange, sweet, base, max }: ConcessionProps) {
+// Diverging view of the trade-off: volume they win above the axis, what they give back on held lines below,
+// and the net change as a line.
+export function ConcessionChart({ points, d, onChange, sweet, max, sweetLabel }: ConcessionProps) {
     const ref = useRef<SVGSVGElement>(null);
-    const top = Math.max(base, ...points.map((p) => p.volume)) * 1.12 || 1;
+    const up = Math.max(1, ...points.map((p) => p.gained)) * 1.15;
+    const down = Math.max(...points.map((p) => p.giveBack), 0) * 1.15;
+    const span = up + down;
     const x = (v: number) => PAD.l + (v / max) * (W - PAD.l - PAD.r);
-    const y = (v: number) => PAD.t + (1 - v / top) * (H - PAD.t - PAD.b);
-    const area = (get: (p: SimPoint) => [number, number]) => {
-        const upper = points.map((p) => `${x(p.d)},${y(get(p)[1])}`);
-        const lower = [...points].reverse().map((p) => `${x(p.d)},${y(get(p)[0])}`);
-        return `M ${upper.join(' L ')} L ${lower.join(' L ')} Z`;
-    };
+    const y = (v: number) => PAD.t + ((up - v) / span) * (H - PAD.t - PAD.b);
+    const area = (get: (p: SimPoint) => number) =>
+        `M ${x(points[0].d)},${y(0)} ` + points.map((p) => `L ${x(p.d)},${y(get(p))}`).join(' ') + ` L ${x(points[points.length - 1].d)},${y(0)} Z`;
     const line = (get: (p: SimPoint) => number) => `M ${points.map((p) => `${x(p.d)},${y(get(p))}`).join(' L ')}`;
     const cur = points.reduce((a, p) => (Math.abs(p.d - d) < Math.abs(a.d - d) ? p : a), points[0]);
     const ticksX = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3].filter((t) => t <= max + 1e-9);
-    const ticksY = [0, 0.25, 0.5, 0.75, 1].map((f) => f * top);
+    const step = niceStep(span / 4);
+    const ticksY: number[] = [];
+    for (let v = -Math.floor(down / step) * step; v <= up; v += step) ticksY.push(v);
 
     function onMove(e: React.PointerEvent) {
         if (e.buttons !== 1 && e.type !== 'pointerdown') return;
@@ -39,20 +42,13 @@ export function ConcessionChart({ points, d, onChange, sweet, base, max }: Conce
     }
 
     return (
-        <svg
-            ref={ref}
-            className="chart concession"
-            viewBox={`0 0 ${W} ${H}`}
-            onPointerDown={onMove}
-            onPointerMove={onMove}
-            role="img"
-            aria-label="Award volume by price concession"
-        >
+        <svg ref={ref} className="chart concession" viewBox={`0 0 ${W} ${H}`} onPointerDown={onMove} onPointerMove={onMove} role="img" aria-label="Volume won and given back by price move">
             {ticksY.map((t, i) => (
                 <g key={i}>
-                    <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} className="grid" />
+                    <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} className={t === 0 ? 'zero' : 'grid'} />
                     <text x={PAD.l - 8} y={y(t) + 4} className="axis" textAnchor="end">
-                        {money(t, { compact: true })}
+                        {t > 0 ? '+' : t < 0 ? '−' : ''}
+                        {money(Math.abs(t), { compact: true })}
                     </text>
                 </g>
             ))}
@@ -61,25 +57,36 @@ export function ConcessionChart({ points, d, onChange, sweet, base, max }: Conce
                     {t === 0 ? 'today' : `−${pct(t)}`}
                 </text>
             ))}
-            <path d={area((p) => [0, p.heldAfter])} className="area-held" />
-            <path d={area((p) => [p.heldAfter, p.volume])} className="area-gained" />
-            <path d={line((p) => p.volume)} className="line-volume" />
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(base)} y2={y(base)} className="line-base" />
-            <text x={W - PAD.r} y={y(base) - 6} className="label-base" textAnchor="end">
-                Today {money(base)}
+            <path d={area((p) => p.gained)} className="area-gained" />
+            {down > 0 && <path d={area((p) => -p.giveBack)} className="area-give" />}
+            <path d={line((p) => p.net)} className="line-net" />
+            <text x={PAD.l + 8} y={PAD.t + 4} className="label-up">
+                Volume they win ↑
             </text>
-            {sweet.d > 0 && sweet.net > 0 && (
+            {down > 0 && (
+                <text x={PAD.l + 8} y={H - PAD.b - 8} className="label-down">
+                    Given back on lines they hold ↓
+                </text>
+            )}
+            {sweet.d > 0 && (
                 <g>
                     <line x1={x(sweet.d)} x2={x(sweet.d)} y1={PAD.t} y2={H - PAD.b} className="line-sweet" />
-                    <text x={x(sweet.d) + 6} y={PAD.t + 12} className="label-sweet">
-                        Best for them: −{pct(sweet.d, 1)}
+                    <text x={x(sweet.d) + (x(sweet.d) > W - 180 ? -6 : 6)} y={PAD.t + 18} className="label-sweet" textAnchor={x(sweet.d) > W - 180 ? 'end' : 'start'}>
+                        {sweetLabel} −{pct(sweet.d, 1)}
                     </text>
                 </g>
             )}
             <line x1={x(cur.d)} x2={x(cur.d)} y1={PAD.t} y2={H - PAD.b} className="line-cursor" />
-            <circle cx={x(cur.d)} cy={y(cur.volume)} r={6} className="dot-cursor" />
+            <circle cx={x(cur.d)} cy={y(cur.net)} r={6} className="dot-cursor" />
         </svg>
     );
+}
+
+function niceStep(raw: number) {
+    if (raw <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / p;
+    return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p;
 }
 
 interface Bucket {

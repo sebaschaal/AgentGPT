@@ -63,7 +63,7 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
             const k = `${s.booth!.hall}.${s.booth!.stand}`;
             const n = seen.get(k) ?? 0;
             seen.set(k, n + 1);
-            return { s, x: p.x + n * 18, y: p.y + n * 6 };
+            return { s, x: p.x + n * 24, y: p.y + n * 8 };
         });
     }, [onFloor]);
     const pointOf = (supplier: string) => placed.find((p) => p.s.supplier === supplier);
@@ -187,6 +187,7 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                     ))}
                 </svg>
                 {placed.map(({ s, x, y }) => {
+                    const rank = onFloor.indexOf(s);
                     const h = 16 + 150 * Math.sqrt(s.spend / maxSpend);
                     const isSel = selected === s.supplier;
                     const dim = selected && !isSel;
@@ -206,7 +207,7 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                             <div className="pillar-cap" style={{ transform: `translateZ(${h}px)` }} />
                             <div className="pillar-label" style={{ transform: `translateZ(${h + 8}px) ${billboard}` }}>
                                 <span className="pillar-logo">{initials(s.supplier)}</span>
-                                <span className="pillar-text">
+                                <span className={`pillar-text${rank < 5 || isSel ? '' : ' pillar-text--hidden'}`}>
                                     <b>{s.supplier}</b>
                                     <em>{money(s.spend)}</em>
                                 </span>
@@ -217,13 +218,28 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
             </div>
 
             <div className="hud hud-tl">
-                <div className="hud-eyebrow">
-                    {FAIR.name} · {FAIR.venue} · {FAIR.dates}
-                </div>
-                <div className="hud-big">{money(atFair)}</div>
-                <div className="hud-sub">
-                    of {money(total)} selected spend sits with {onFloor.length} supplier{onFloor.length === 1 ? '' : 's'} on the floor
-                </div>
+                {selected && pointOf(selected) ? (
+                    <>
+                        <div className="hud-eyebrow">
+                            Hall {pointOf(selected)!.s.booth!.hall} · Stand {pointOf(selected)!.s.booth!.stand}
+                            {pointOf(selected)!.s.booth!.confirmed ? '' : ' · earlier edition'}
+                        </div>
+                        <div className="hud-big">{selected}</div>
+                        <div className="hud-sub">
+                            {money(pointOf(selected)!.s.spend)} selected spend · {(pointOf(selected)!.s.share * 100).toFixed(1)}% of this project
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="hud-eyebrow">
+                            {FAIR.name} · {FAIR.venue} · {FAIR.dates}
+                        </div>
+                        <div className="hud-big">{money(atFair)}</div>
+                        <div className="hud-sub">
+                            of {money(total)} selected spend sits with {onFloor.length} supplier{onFloor.length === 1 ? '' : 's'} on the floor
+                        </div>
+                    </>
+                )}
             </div>
             <div className="hud hud-tr">
                 {daysToFair > 0 && <span className="countdown">Doors open in {daysToFair} day{daysToFair === 1 ? '' : 's'}</span>}

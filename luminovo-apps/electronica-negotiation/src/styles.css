@@ -406,8 +406,8 @@ h3 {
 }
 .pillar {
     position: absolute;
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
     transform-style: preserve-3d;
     cursor: pointer;
     transition: opacity 0.4s;
@@ -419,19 +419,19 @@ h3 {
     position: absolute;
     left: 0;
     bottom: 0;
-    width: 14px;
+    width: 20px;
     transform-origin: bottom center;
     animation: rise 1.4s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
 .pillar-front {
     top: auto;
-    bottom: 14px;
+    bottom: 20px;
     transform: rotateX(-90deg);
     background: var(--p6);
 }
 .pillar-side {
-    bottom: 14px;
-    left: 7px;
+    bottom: 20px;
+    left: 10px;
     transform: rotateZ(90deg) rotateX(-90deg);
     background: var(--p8);
 }
@@ -439,8 +439,8 @@ h3 {
     position: absolute;
     left: 0;
     top: 0;
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
     background: #8f9cff;
     transition: transform 1.4s;
 }
@@ -468,20 +468,21 @@ h3 {
     }
 }
 .pillar-label {
+    /* Children must fit inside this box: Chrome culls what overflows a 3D layer. */
     position: absolute;
-    left: 7px;
-    top: 7px;
-    width: 0;
-    height: 0;
+    left: -4px;
+    top: -24px;
+    width: 220px;
+    height: 34px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    transform-origin: 14px 34px;
     transition: transform 1.9s cubic-bezier(0.22, 0.8, 0.2, 1);
-}
-.pillar-label > * {
     pointer-events: none;
 }
 .pillar-logo {
-    position: absolute;
-    left: -14px;
-    bottom: 0;
+    flex: none;
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -492,21 +493,17 @@ h3 {
     font-size: 10px;
     font-weight: 700;
     box-shadow: 0 0 0 2px var(--p6);
-}
-.pillar--sel .pillar-logo {
-    box-shadow: 0 0 0 3px #f0ff65;
+    margin-bottom: 2px;
 }
 .pillar-text {
-    position: absolute;
-    left: 18px;
-    bottom: 2px;
     display: flex;
     flex-direction: column;
     white-space: nowrap;
     line-height: 13px;
-    background: rgba(21, 26, 44, 0.78);
+    background: rgba(21, 26, 44, 0.82);
     padding: 3px 7px;
     border-radius: 6px;
+    margin-bottom: 2px;
 }
 .pillar-text b {
     font-size: 11px;
@@ -526,7 +523,9 @@ h3 {
 .hud-tl {
     left: 20px;
     top: 18px;
-    max-width: 380px;
+    max-width: 420px;
+    padding: 4px 12px 8px 0;
+    background: radial-gradient(ellipse at 0 0, rgba(21, 26, 44, 0.85) 40%, transparent 75%);
 }
 .hud-eyebrow {
     font-size: 11px;
@@ -1222,26 +1221,88 @@ h3 {
     fill: var(--n6);
     font-size: 11px;
 }
-.area-held {
-    fill: var(--p3);
+.chart .zero {
+    stroke: var(--n7);
 }
 .area-gained {
     fill: var(--p6);
-    opacity: 0.9;
+    opacity: 0.85;
 }
-.line-volume {
+.area-give {
+    fill: var(--red6);
+    opacity: 0.28;
+}
+.line-net {
     fill: none;
-    stroke: var(--p8);
+    stroke: var(--n9);
     stroke-width: 2;
 }
-.line-base {
-    stroke: var(--n8);
-    stroke-dasharray: 4 4;
-}
-.label-base {
+.label-up {
     font-size: 11px;
-    fill: var(--n8);
+    fill: var(--p8);
     font-weight: 600;
+}
+.label-down {
+    font-size: 11px;
+    fill: var(--red6);
+    font-weight: 600;
+}
+.checkpoints {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 4px 0 12px;
+}
+.checkpoint {
+    border: 1px solid var(--n3);
+    background: #fff;
+    border-radius: 8px;
+    padding: 4px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 16px;
+}
+.checkpoint b {
+    font-size: 13px;
+}
+.checkpoint em {
+    font-style: normal;
+    font-size: 12px;
+    color: var(--n7);
+}
+.checkpoint.on {
+    border-color: var(--p6);
+    background: var(--p1);
+}
+.checkpoint .up {
+    color: var(--grn6);
+}
+.legend-row {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--n7);
+    margin: 0 0 4px;
+}
+.legend-row i {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: -1px;
+}
+.lg-win {
+    background: var(--p6);
+}
+.lg-give {
+    background: rgba(232, 94, 108, 0.4);
+}
+.lg-net {
+    background: var(--n9);
+    height: 2px !important;
+    vertical-align: 3px !important;
 }
 .line-sweet {
     stroke: var(--grn6);
@@ -1313,7 +1374,7 @@ h3 {
 }
 .bucket {
     display: grid;
-    grid-template-columns: 110px 1fr 96px;
+    grid-template-columns: 150px 1fr 96px;
     gap: 8px;
     align-items: center;
     border: 1px solid transparent;
@@ -1602,4 +1663,69 @@ h3 {
 .tag-lead.thin {
     color: var(--yel7);
     font-weight: 600;
+}
+
+/* ------------------------------------------------------------ controls (match the product; the platform CSS may also style these) */
+.app .lumi-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid var(--p6);
+    background: var(--p6);
+    color: #fff;
+    font-weight: 500;
+    font-size: 14px;
+    white-space: nowrap;
+}
+.app .lumi-btn:hover:not(:disabled) {
+    background: var(--p8);
+}
+.app .lumi-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.app .lumi-btn--secondary {
+    background: #fff;
+    color: var(--p6);
+    border-color: var(--p4);
+}
+.app .lumi-btn--secondary:hover:not(:disabled) {
+    background: var(--p1);
+}
+.app .lumi-btn--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--n7);
+}
+.app .lumi-btn--ghost:hover:not(:disabled) {
+    background: var(--n1);
+}
+.app .lumi-input {
+    height: 32px;
+    border: 1px solid var(--n3);
+    border-radius: 8px;
+    padding: 0 10px;
+    font: inherit;
+}
+.app .lumi-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--p3);
+    border-color: var(--p5);
+}
+
+.linkish {
+    border: 0;
+    background: none;
+    color: var(--p6);
+    font-weight: 600;
+    padding: 0;
+    text-decoration: underline;
+}
+.target {
+    font-weight: 600;
+    color: var(--p8);
 }

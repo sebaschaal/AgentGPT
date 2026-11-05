@@ -5,6 +5,7 @@ import { ConcessionChart, GapBuckets, MoveBar } from './charts';
 import { ago, initials, money, pct, qty, signedPct, unit } from './format';
 import {
     analyse,
+    bestStart,
     buckets,
     curve,
     simulate,
@@ -65,7 +66,8 @@ export function SupplierView(p: Props) {
 
     const a = useMemo(() => analyse(supplier.supplier, lines, comp), [supplier.supplier, lines, comp]);
     const points = useMemo(() => curve(a, mode), [a, mode]);
-    const sweet = useMemo(() => sweetSpot(points), [points]);
+    const sweet = useMemo(() => sweetSpot(points, mode), [points, mode]);
+    const [touched, setTouched] = useState(false);
     const sim = simulate(a, d, mode);
     const bks = useMemo(() => buckets(a), [a]);
     const within10 = withinVolume(a, 0.1);
@@ -75,7 +77,22 @@ export function SupplierView(p: Props) {
         setBrief({ loading: false });
         setBucket(null);
         setFilter('all');
+        setTouched(false);
     }, [supplier.supplier]);
+
+    // Start the simulator on the supplier's best move; refine it while the scan fills in, until the user takes over.
+    useEffect(() => {
+        if (touched || a.covered === 0) return;
+        const start = bestStart(a);
+        setMode(start.mode);
+        setD(start.d);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [a, touched]);
+    const moveTo = (v: number) => {
+        setTouched(true);
+        setD(v);
+    };
+    const checkpoints = [0.03, 0.05, 0.1, 0.15, 0.2].map((c) => ({ c, p: simulate(a, c, mode) }));
 
     useEffect(() => {
         if (!p.news) p.loadNews();
@@ -310,10 +327,10 @@ export function SupplierView(p: Props) {
                                 </p>
                             </div>
                             <div className="seg">
-                                <button className={mode === 'across' ? 'on' : ''} onClick={() => setMode('across')}>
+                                <button className={mode === 'across' ? 'on' : ''} onClick={() => (setTouched(true), setMode('across'))}>
                                     Across the board
                                 </button>
-                                <button className={mode === 'targeted' ? 'on' : ''} onClick={() => setMode('targeted')}>
+                                <button className={mode === 'targeted' ? 'on' : ''} onClick={() => (setTouched(true), setMode('targeted'))}>
                                     Only on lines they don't hold
                                 </button>
                             </div>
@@ -322,8 +339,34 @@ export function SupplierView(p: Props) {
                             <div className="sim-empty">{scanning ? 'Scanning competing offers…' : 'No competing offers on this scenario.'}</div>
                         ) : (
                             <>
-                                <ConcessionChart points={points} d={d} onChange={setD} sweet={sweet} base={a.heldVolume} max={0.3} />
-                                <input className="slider" type="range" min={0} max={0.3} step={0.0025} value={d} onChange={(e) => setD(Number(e.target.value))} aria-label="Price concession" />
+                                <div className="legend-row">
+                                    <span>
+                                        <i className="lg-win" />
+                                        Volume they win
+                                    </span>
+                                    {mode === 'across' && (
+                                        <span>
+                                            <i className="lg-give" />
+                                            Given back on lines they hold
+                                        </span>
+                                    )}
+                                    <span>
+                                        <i className="lg-net" />
+                                        Net change for them
+                                    </span>
+                                </div>
+                                <ConcessionChart points={points} d={d} onChange={moveTo} sweet={sweet} max={0.3} sweetLabel={mode === 'across' ? 'Best net for them' : 'Most volume per point'} />
+                                <input className="slider" type="range" min={0} max={0.3} step={0.0025} value={d} onChange={(e) => moveTo(Number(e.target.value))} aria-label="Price move" />
+                                <div className="checkpoints">
+                                    {checkpoints.map(({ c, p: cp }) => (
+                                        <button key={c} className={`checkpoint${Math.abs(c - d) < 0.001 ? ' on' : ''}`} onClick={() => moveTo(c)}>
+                                            <b>−{pct(c)}</b>
+                                            <em>
+                                                <span className={cp.volume >= a.heldVolume ? 'up' : 'down'}>{signedPct(a.heldVolume ? cp.volume / a.heldVolume - 1 : 0, 0)} volume</span> · +{cp.wonLines} lines
+                                            </em>
+                                        </button>
+                                    ))}
+                                </div>
                                 <div className="readout">
                                     <div className="readout-big">
                                         <span className="muted">Price move</span>
@@ -331,7 +374,9 @@ export function SupplierView(p: Props) {
                                     </div>
                                     <div className="readout-big">
                                         <span className="muted">Award volume</span>
-                                        <b>{money(sim.volume)}</b>
+                                        <b>
+                                            {money(a.heldVolume)} → {money(sim.volume)}
+                                        </b>
                                         <em className={volumeUp >= 0 ? 'up' : 'down'}>{signedPct(volumeUp)}</em>
                                     </div>
                                     <div className="readout-big">
@@ -342,9 +387,11 @@ export function SupplierView(p: Props) {
                                         <em className="up">+{sim.wonLines} won</em>
                                     </div>
                                     <div className="readout-big">
-                                        <span className="muted">They give back</span>
-                                        <b className="down">{money(sim.giveBack)}</b>
-                                        <em>on lines they hold</em>
+                                        <span className="muted">They win / give back</span>
+                                        <b>
+                                            <span className="up">+{money(sim.gained)}</span> <span className="down">−{money(sim.giveBack)}</span>
+                                        </b>
+                                        <em>{mode === 'across' ? 'give-back on lines they hold' : 'no give-back on held lines'}</em>
                                     </div>
                                     <div className="readout-big">
                                         <span className="muted">Net for them</span>
@@ -355,9 +402,17 @@ export function SupplierView(p: Props) {
                                     </div>
                                 </div>
                                 <p className="sim-say">
-                                    {sweet.net > 0 ? (
+                                    {sim.wonLines > 0 && sim.net > 0 ? (
                                         <>
-                                            Say it like this: “Move <b>{pct(sweet.d, 1)}</b>{mode === 'across' ? ' across the board' : ' on the lines you don’t have yet'} and you win <b>{sweet.wonLines} more lines</b>. Your volume with us goes from <b>{money(a.heldVolume)}</b> to <b>{money(sweet.volume)}</b>, net <b>+{money(sweet.net)}</b> for you.”
+                                            Say it like this: “Move <b>{pct(d, 1)}</b>
+                                            {mode === 'across' ? ' across the board' : ' on the lines you don’t have yet'} and you win <b>{sim.wonLines} more line{sim.wonLines === 1 ? '' : 's'}</b>. Your volume with us goes from <b>{money(a.heldVolume)}</b> to <b>{money(sim.volume)}</b> ({signedPct(volumeUp, 0)}).”
+                                        </>
+                                    ) : sweet.d > 0 && sweet.net > 0 ? (
+                                        <>
+                                            At this move they don’t gain. Their best point is <b>−{pct(sweet.d, 1)}</b>: {sweet.wonLines} more lines and {money(sweet.volume)} award volume.{' '}
+                                            <button className="linkish" onClick={() => moveTo(sweet.d)}>
+                                                Jump there
+                                            </button>
                                         </>
                                     ) : (
                                         <>No price move wins them net volume on this project. Use the price-match asks and the lines they have not quoted instead.</>
@@ -389,7 +444,7 @@ export function SupplierView(p: Props) {
                                         <li key={h.line.id}>
                                             <span className="mpn">{h.line.mpn}</span>
                                             <span>
-                                                {h.alt!.supplier} is {pct(-h.cushion!, 1)} lower
+                                                {h.alt!.supplier} is {pct(-h.cushion!, 1)} lower{h.altApproved ? '' : ' (not approved)'}
                                             </span>
                                             <b className="up">save {money(h.award - h.alt!.total)}</b>
                                         </li>
@@ -503,6 +558,7 @@ export function SupplierView(p: Props) {
                                 <th>Next best / winner</th>
                                 <th className="num">Unit price</th>
                                 <th>Gap</th>
+                                <th className="num">Ask for</th>
                                 <th className="num">Line value</th>
                             </tr>
                         </thead>
@@ -533,6 +589,12 @@ export function SupplierView(p: Props) {
                                                 <span className={`tag-lead${r.cushion < 0.05 ? ' thin' : ''}`}>leads by {pct(r.cushion, 1)}</span>
                                             ))}
                                         {r.kind === 'none' && <span className="muted small">ask for a quote</span>}
+                                    </td>
+                                    <td className="num target">
+                                        {r.kind === 'held' && r.cushion !== null && r.cushion < -0.001 && r.refUnit !== null && <span title="Match the cheaper competitor">{unit(r.refUnit)}</span>}
+                                        {r.kind === 'contest' && r.move !== null && r.theirUnit !== null && (
+                                            <span title="Unit price at which they win the line">{r.move <= 0 ? 'award terms' : `≤ ${unit(r.theirUnit * (1 - r.move - 0.005))}`}</span>
+                                        )}
                                     </td>
                                     <td className="num">{money(r.award)}</td>
                                 </tr>
