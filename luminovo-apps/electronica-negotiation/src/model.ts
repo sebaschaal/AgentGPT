@@ -17,6 +17,7 @@ export interface Line {
     leadDays: number | null;
     manual: boolean;
     abc: string | null;
+    notes?: string | null;
 }
 
 export interface Option {

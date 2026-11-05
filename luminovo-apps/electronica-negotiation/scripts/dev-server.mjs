@@ -123,6 +123,7 @@ const handlers = {
             remote: (input.offFloor ?? []).slice(0, 3).map((s) => ({ supplier: s.supplier, action: 'Send the open lines for a quote after the show.' })),
         },
     }),
+    logOutcome: (input) => ({ written: input.lineIds.length }),
     brief: () => ({
         brief: {
             stance: 'We hold the volume; they are within reach on a third of the lines they lost.',

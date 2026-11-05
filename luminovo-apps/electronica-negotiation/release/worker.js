@@ -127,6 +127,7 @@ function lineFromCalc(l) {
     stockLocation: loc?.stock_location ?? null,
     priceType: l.offer?.price_type ?? null,
     leadDays: lead,
+    notes: l.solution_summary?.notes ?? null,
     manual: l.selection === "Manual" || (l.solution_summary?.solution_tags ?? []).some((t) => t.tag === "ManualOffer"),
     abc: l.abc_classification?.label ?? null
   };
@@ -462,6 +463,30 @@ async function brief(input) {
   });
   return json({ brief: res.output ?? null });
 }
+async function logOutcome(input) {
+  const lineIds = (input.lineIds ?? []).filter((x) => uuidRe.test(x)).slice(0, 80);
+  const note = String(input.note ?? "").trim().slice(0, 600);
+  if (!lineIds.length || !note) return json({ error: "nothing_to_write" }, 400);
+  const current = await pool(lineIds, 6, async (id) => {
+    const r = await getJson(`/sourcing/calculation/line-items/${id}`, "line");
+    return { id, notes: r?.data?.solution_summary?.notes ?? null };
+  });
+  const items = current.map(({ id, notes }) => {
+    const merged = !notes ? note : notes.includes(note) ? notes : `${notes}
+${note}`;
+    return { id, update: { kind: "Notes", data: merged } };
+  });
+  const res = await fetch(`${API}/sourcing-line-item`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ items })
+  });
+  if (!res.ok) {
+    console.error(`notes write ${res.status}: ${(await res.text()).slice(0, 500)}`);
+    return json({ error: "write_failed", hint: res.status === 403 ? "You are not allowed to edit this sourcing scenario." : void 0 }, res.status === 401 ? 403 : res.status >= 500 ? 502 : res.status);
+  }
+  return json({ written: items.length });
+}
 var index_default = {
   async fetch(request) {
     let handler = "";
@@ -486,6 +511,8 @@ var index_default = {
           return await plan(input);
         case "brief":
           return await brief(input);
+        case "logOutcome":
+          return await logOutcome(input);
         default:
           return json({ error: "unknown_handler" }, 404);
       }

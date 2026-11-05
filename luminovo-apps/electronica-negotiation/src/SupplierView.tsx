@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNotify } from '@luminovo/widget-sdk';
 import { Copy, MessageSquareQuote, Presentation, Sparkles, X } from 'lucide-react';
 import { PitchView } from './PitchView';
+import { OutcomeCard } from './Outcome';
 import { call, describeError } from './api';
 import { ConcessionChart, GapBuckets, MoveBar } from './charts';
 import { initials, money, pct, qty, signedPct, unit } from './format';
@@ -570,6 +571,9 @@ export function SupplierView(p: Props) {
                                 </div>
                             </div>
                         )}
+                    </div>
+                    <div className="outcome-wrap">
+                        <OutcomeCard supplier={supplier.supplier} a={a} d={d} />
                     </div>
                 </div>
             )}

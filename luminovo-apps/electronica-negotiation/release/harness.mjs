@@ -9,6 +9,8 @@ const ROUTES = [
     [/^\/api\/sourcing-scenarios\/bulk$/, 'POST', () => ['POST /sourcing-scenarios/bulk', {}]],
     [/^\/api\/sourcing\/calculation\/read-selection$/, 'POST', () => ['POST /sourcing/calculation/read-selection', {}]],
     [/^\/api\/sourcing-line-item\/([^/]+)\/solutions$/, 'GET', (m) => ['GET /sourcing-line-item/:id/solutions', { pathParams: { id: m[1] } }]],
+    [/^\/api\/sourcing\/calculation\/line-items\/([^/]+)$/, 'GET', (m) => ['GET /sourcing/calculation/line-items/:id', { pathParams: { id: m[1] } }]],
+    [/^\/api\/sourcing-line-item$/, 'PATCH', () => ['PATCH /sourcing-line-item', {}]],
 ];
 
 function respond(body, status = 200, type = 'application/json') {

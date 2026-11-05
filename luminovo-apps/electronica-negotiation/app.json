@@ -8,32 +8,111 @@
   "catalog": {
     "summary": "Turn your sourcing data into a hall-by-hall negotiation plan for electronica Munich.",
     "category": "negotiation",
-    "tags": ["electronica", "trade fair", "negotiation", "supplier spend", "battle card"]
+    "tags": [
+      "electronica",
+      "trade fair",
+      "negotiation",
+      "supplier spend",
+      "battle card"
+    ]
   },
   "permissions": {
     "endpoints": [
-      { "patterns": ["GET /api/rfqs/*", "POST /api/sourcing-scenarios/bulk", "POST /api/sourcing/calculation/read-selection"], "reason": "reads the project, its sourcing scenarios and the offers selected on every line" },
-      { "patterns": ["GET /api/sourcing-line-item/*/solutions"], "reason": "reads every competing offer on a line to show the next best alternative and the price gap" },
-      { "patterns": ["POST /apps/_api/warehouse/query"], "reason": "lists recent projects and scenarios for the project picker and the cross-project spend view" }
+      {
+        "patterns": [
+          "GET /api/rfqs/*",
+          "POST /api/sourcing-scenarios/bulk",
+          "POST /api/sourcing/calculation/read-selection"
+        ],
+        "reason": "reads the project, its sourcing scenarios and the offers selected on every line"
+      },
+      {
+        "patterns": [
+          "GET /api/sourcing-line-item/*/solutions"
+        ],
+        "reason": "reads every competing offer on a line to show the next best alternative and the price gap"
+      },
+      {
+        "patterns": [
+          "POST /apps/_api/warehouse/query"
+        ],
+        "reason": "lists recent projects and scenarios for the project picker and the cross-project spend view"
+      },
+      {
+        "patterns": [
+          "GET /api/sourcing/calculation/line-items/*",
+          "PATCH /api/sourcing-line-item"
+        ],
+        "reason": "when you log a negotiation outcome, adds it as a note on the sourcing lines it covers"
+      }
     ],
     "publicEndpoints": [
-      { "patterns": ["POST /offers/bulk"], "reason": "resolves competing offers to their supplier" }
+      {
+        "patterns": [
+          "POST /offers/bulk"
+        ],
+        "reason": "resolves competing offers to their supplier"
+      }
     ],
-    "warehouse": [{ "tables": ["rfq", "sourcing_scenario", "customer"], "reason": "project picker and cross-project spend" }],
+    "warehouse": [
+      {
+        "tables": [
+          "rfq",
+          "sourcing_scenario",
+          "customer"
+        ],
+        "reason": "project picker and cross-project spend"
+      }
+    ],
     "external": [
-      { "id": "bing-news", "host": "www.bing.com", "auth": "none", "scope": "tenant", "reason": "reads public news headlines about a supplier for the conversation opener" },
-      { "id": "gdelt", "host": "api.gdeltproject.org", "auth": "none", "scope": "tenant", "reason": "reads public news headlines about a supplier when the first source has none" }
+      {
+        "id": "bing-news",
+        "host": "www.bing.com",
+        "auth": "none",
+        "scope": "tenant",
+        "reason": "reads public news headlines about a supplier for the conversation opener"
+      },
+      {
+        "id": "gdelt",
+        "host": "api.gdeltproject.org",
+        "auth": "none",
+        "scope": "tenant",
+        "reason": "reads public news headlines about a supplier when the first source has none"
+      }
     ],
-    "llm": { "models": ["fast", "balanced"], "reason": "writes the walking route, battle cards, news summary and negotiation brief" }
+    "llm": {
+      "models": [
+        "fast",
+        "balanced"
+      ],
+      "reason": "writes the walking route, battle cards, news summary and negotiation brief"
+    }
   },
   "widgets": [
     {
       "id": "floor",
-      "name": { "en": "electronica negotiation" },
+      "name": {
+        "en": "electronica negotiation"
+      },
       "kind": "full-page",
       "route": "/apps/electronica-negotiation",
-      "slotIds": ["slots.full-page"],
-      "paramsSchema": { "type": "object", "properties": { "project": { "type": "string" }, "scenario": { "type": "string" }, "supplier": { "type": "string" } } }
+      "slotIds": [
+        "slots.full-page"
+      ],
+      "paramsSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "scenario": {
+            "type": "string"
+          },
+          "supplier": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "workflows": []

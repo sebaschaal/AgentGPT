@@ -1687,3 +1687,66 @@ svg.concession {
 .chart-box {
     width: 100%;
 }
+
+/* ------------------------------------------------------------ outcome write-back */
+.outcome-wrap {
+    grid-column: 1 / -1;
+}
+.outcome-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--content-subtle);
+    flex: none;
+}
+.outcome-form {
+    display: grid;
+    grid-template-columns: auto 140px minmax(220px, 1fr) minmax(220px, 1.4fr);
+    gap: var(--gap-group);
+    align-items: end;
+}
+.outcome-form .field {
+    display: grid;
+    gap: var(--space-1);
+}
+.outcome-move {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.outcome-move input {
+    width: 100%;
+    border: 0;
+    outline: none;
+    font: inherit;
+    background: transparent;
+    text-align: right;
+}
+.outcome-preview {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: var(--space-1);
+    background: var(--surface-subtle);
+    border: 1px solid var(--line-subtle);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+}
+.outcome-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-2);
+}
+@media (max-width: 1100px) {
+    .outcome-form {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+@media (max-width: 760px) {
+    .outcome-form {
+        grid-template-columns: 1fr;
+    }
+    .outcome-actions {
+        flex-wrap: wrap;
+    }
+}
