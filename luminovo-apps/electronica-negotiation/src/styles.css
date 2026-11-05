@@ -1391,3 +1391,8 @@ svg.concession {
     display: grid;
     gap: var(--space-1);
 }
+
+.plan-meta {
+    align-self: center;
+    white-space: nowrap;
+}

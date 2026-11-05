@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useWidgetContext } from '@luminovo/widget-sdk';
-import { ChevronDown, Sparkles, CircleAlert } from 'lucide-react';
+import { useNavigate, useNotify, useWidgetContext } from '@luminovo/widget-sdk';
+import { ChevronDown, CircleAlert, Copy, Sparkles } from 'lucide-react';
 import { call, describeError } from './api';
 import { FloorPlan, type RouteStop } from './FloorPlan';
 import { SupplierView, type NewsState } from './SupplierView';
@@ -40,6 +40,7 @@ interface Plan {
 }
 
 const LS_PROJECT = 'electronica-negotiation.project';
+const LS_PLAN = (scenarioId: string) => `electronica-negotiation.plan.${scenarioId}`;
 const read = (k: string) => {
     try {
         return localStorage.getItem(k);
@@ -53,9 +54,23 @@ const write = (k: string, v: string) => {
     } catch {}
 };
 
+// The last battle plan per scenario, on this device only, so reopening the app does not pay for a new plan.
+function readPlan(scenarioId: string): { at: string; data: Plan } | null {
+    try {
+        const raw = read(LS_PLAN(scenarioId));
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+function savePlan(scenarioId: string, data: Plan) {
+    write(LS_PLAN(scenarioId), JSON.stringify({ at: new Date().toISOString(), data }));
+}
+
 export function App() {
     const { slotToken } = useWidgetContext();
     const navigate = useNavigate();
+    const notify = useNotify();
     const params = (slotToken?.params ?? {}) as Record<string, string | undefined>;
 
     const [projects, setProjects] = useState<ProjectRow[] | null>(null);
@@ -73,7 +88,7 @@ export function App() {
     const [compProgress, setCompProgress] = useState({ done: 0, total: 0 });
     const [portfolioRaw, setPortfolioRaw] = useState<any[]>([]);
     const [portfolioProgress, setPortfolioProgress] = useState({ done: 0, total: 0 });
-    const [plan, setPlan] = useState<{ loading: boolean; data?: Plan; error?: string }>({ loading: false });
+    const [plan, setPlan] = useState<{ loading: boolean; data?: Plan; error?: string; at?: string }>({ loading: false });
     const [news, setNews] = useState<Record<string, NewsState>>({});
     const initialised = useRef(false);
 
@@ -110,9 +125,18 @@ export function App() {
     }, [query, pickerOpen]);
 
     // ------------------------------------------------------------ project + scenario
+    // The first load learns the scenario from the response; setting it must not trigger a second load.
+    const ctrlRef = useRef<AbortController | null>(null);
+    const adoptedScenario = useRef<string | null>(null);
     useEffect(() => {
         if (!rfqId) return;
+        if (adoptedScenario.current !== null && adoptedScenario.current === scenarioId) {
+            adoptedScenario.current = null;
+            return;
+        }
+        ctrlRef.current?.abort();
         const ctrl = new AbortController();
+        ctrlRef.current = ctrl;
         setLoading(true);
         setError(null);
         setPlan({ loading: false });
@@ -122,17 +146,22 @@ export function App() {
             .then((d) => {
                 setCurrency(d.project.currency);
                 setData(d);
-                if (d.scenarioId !== scenarioId) setScenarioId(d.scenarioId);
+                if (d.scenarioId !== scenarioId) {
+                    adoptedScenario.current = d.scenarioId;
+                    setScenarioId(d.scenarioId);
+                }
                 write(LS_PROJECT, rfqId);
+                const cached = d.scenarioId ? readPlan(d.scenarioId) : null;
+                if (cached) setPlan({ loading: false, data: cached.data, at: cached.at });
                 scanCompetition(d, ctrl.signal);
             })
             .catch((e) => {
                 if ((e as Error).name !== 'AbortError') setError(describeError(e));
             })
             .finally(() => setLoading(false));
-        return () => ctrl.abort();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rfqId, scenarioId]);
+    useEffect(() => () => ctrlRef.current?.abort(), []);
 
     // keep the URL shareable
     useEffect(() => {
@@ -295,7 +324,13 @@ export function App() {
                 project: { name: data.project.name, customer: data.project.customer, selectedSpend: Math.round(spend.total) },
                 currency: data.project.currency,
                 stops,
-                offFloor: offFloor.slice(0, 12).map((s) => ({ supplier: s.supplier, projectSpend: Math.round(s.spend), shareOfProject: pct(s.share, 1) })),
+                offFloor: [
+                    ...offFloor.slice(0, 10).map((s) => ({ supplier: s.supplier, type: 'distributor', projectSpend: Math.round(s.spend), shareOfProject: pct(s.share, 1) })),
+                    ...makers
+                        .filter((m) => !m.booth)
+                        .slice(0, 3)
+                        .map((m) => ({ supplier: m.supplier, type: 'manufacturer', projectSpend: Math.round(m.spend), shareOfProject: pct(m.share, 1), boughtThrough: m.via[0]?.supplier })),
+                ],
             });
             const p = res.plan;
             if (!p) throw new Error('The model returned no plan. Try again.');
@@ -310,7 +345,9 @@ export function App() {
                     return { ...r, supplier: hit?.name ?? '', kind: hit?.kind, booth: hit?.booth };
                 })
                 .filter((r, i, arr) => r.supplier && arr.findIndex((x) => x.supplier === r.supplier) === i);
-            setPlan({ loading: false, data: { ...p, route } });
+            const planned = { ...p, route } as Plan;
+            setPlan({ loading: false, data: planned, at: new Date().toISOString() });
+            if (data.scenarioId) savePlan(data.scenarioId, planned);
         } catch (e) {
             setPlan({ loading: false, error: describeError(e) });
         }
@@ -323,6 +360,24 @@ export function App() {
     };
     const currentProject = projects?.find((p) => p.id === rfqId);
     const maxSup = Math.max(1, ...entities.map((s) => s.spend));
+    function copyRoute() {
+        if (!plan.data || !data) return;
+        const lines = [
+            `${FAIR.name}: ${data.project.name}`,
+            plan.data.headline,
+            '',
+            ...plan.data.route.map((r, i) => {
+                const b = r.booth ?? [...onFloor, ...makers].find((x) => x.supplier === r.supplier)?.booth;
+                return `${i + 1}. ${r.supplier}${b ? ` (hall ${b.hall}, stand ${b.stand})` : ''}, ${r.minutes} min\n   ${r.objective}\n   Ask: ${r.ask}`;
+            }),
+            ...(plan.data.remote.length ? ['', 'Off the floor', ...plan.data.remote.map((r) => `- ${r.supplier}: ${r.action}`)] : []),
+        ];
+        navigator.clipboard.writeText(lines.join('\n')).then(
+            () => notify('Route copied'),
+            () => notify('Could not copy the route', 'warning'),
+        );
+    }
+
     const openStop = (r: RouteStop) => {
         const want = r.kind === 'manufacturer' ? 'manufacturers' : 'distributors';
         if (want !== layer) setLayer(want);
@@ -468,7 +523,17 @@ export function App() {
                                     {plan.data?.headline ?? 'An AI-ranked walking route with one battle card per stand: what to walk away with, why it matters, and the ask.'}
                                 </p>
                             </div>
-                            {plan.data && <span className="text-body-sm text-subtle">{plan.data.route.reduce((m, r) => m + (r.minutes || 0), 0)} min on the floor</span>}
+                            {plan.data && (
+                                <div className="row-actions">
+                                    <span className="text-body-sm text-subtle plan-meta">
+                                        {plan.data.route.reduce((m, r) => m + (r.minutes || 0), 0)} min on the floor{plan.at ? ` · planned ${ago(plan.at)}` : ''}
+                                    </span>
+                                    <button className="btn btn-secondary btn-sm" onClick={copyRoute}>
+                                        <Copy />
+                                        Copy route
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         {plan.error && (
                             <div className="message critical" role="alert">
