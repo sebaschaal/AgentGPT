@@ -1,0 +1,26 @@
+{
+  "name": "electronica-negotiation",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:web": "vite build",
+    "build:worker": "esbuild worker/index.ts --bundle --format=esm --platform=neutral --target=es2022 --outfile=dist-bundle/worker.js",
+    "typecheck": "tsc --noEmit",
+    "bundle": "bash scripts/bundle.sh"
+  },
+  "dependencies": {
+    "@luminovo/widget-sdk": "^0.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21"
+  }
+}
