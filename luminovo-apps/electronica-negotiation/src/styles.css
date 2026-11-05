@@ -1383,3 +1383,11 @@ svg.concession {
 .app .segmented > * {
     white-space: nowrap;
 }
+
+.via-row {
+    grid-template-columns: 1fr auto !important;
+}
+.via-row .hall-info {
+    display: grid;
+    gap: var(--space-1);
+}

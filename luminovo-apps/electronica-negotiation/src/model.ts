@@ -1,4 +1,4 @@
-import { boothFor, type Booth } from './fair';
+import { boothFor, makerBoothFor, type Booth } from './fair';
 
 export interface Line {
     id: string;
@@ -70,6 +70,36 @@ export function supplierSpend(lines: Line[]): { suppliers: SupplierSpend[]; tota
     const suppliers = [...map.values()].sort((a, b) => b.spend - a.spend);
     for (const s of suppliers) s.share = total ? s.spend / total : 0;
     return { suppliers, total, unsourced };
+}
+
+export interface MakerSpend extends SupplierSpend {
+    via: { supplier: string; spend: number }[]; // which distributors the maker's parts are bought through
+    topLines: Line[];
+}
+
+export function makerSpend(lines: Line[]): MakerSpend[] {
+    const map = new Map<string, MakerSpend>();
+    let total = 0;
+    for (const l of lines) {
+        if (!l.total || !l.manufacturer) continue;
+        total += l.total;
+        const k = key(l.manufacturer);
+        const cur = map.get(k) ?? { supplier: l.manufacturer, spend: 0, lines: 0, share: 0, booth: makerBoothFor(l.manufacturer), via: [], topLines: [] };
+        cur.spend += l.total;
+        cur.lines += 1;
+        cur.topLines.push(l);
+        const v = cur.via.find((x) => x.supplier === (l.supplier ?? '—'));
+        if (v) v.spend += l.total;
+        else cur.via.push({ supplier: l.supplier ?? '—', spend: l.total });
+        map.set(k, cur);
+    }
+    const out = [...map.values()].sort((a, b) => b.spend - a.spend);
+    for (const m of out) {
+        m.share = total ? m.spend / total : 0;
+        m.via.sort((a, b) => b.spend - a.spend);
+        m.topLines.sort((a, b) => b.total - a.total);
+    }
+    return out;
 }
 
 export interface HallSpend {
@@ -294,9 +324,13 @@ export interface PortfolioEntry {
     projects: number;
 }
 
-export function mergePortfolio(results: { suppliers: Record<string, { spend: number; lines: number }> }[]): Map<string, PortfolioEntry> {
+export function mergePortfolio(
+    results: { currency?: string | null; suppliers: Record<string, { spend: number; lines: number }> }[],
+    currency?: string,
+): Map<string, PortfolioEntry> {
     const map = new Map<string, PortfolioEntry>();
-    for (const r of results)
+    // Only add up scenarios priced in the project's currency; mixing EUR and USD totals would mislead.
+    for (const r of results.filter((x) => !currency || !x.currency || x.currency === currency))
         for (const [name, v] of Object.entries(r.suppliers ?? {})) {
             const k = key(name);
             const cur = map.get(k) ?? { supplier: name, spend: 0, lines: 0, projects: 0 };

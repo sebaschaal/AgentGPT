@@ -52,8 +52,24 @@ var BOOTHS = [
   { company: "STMicroelectronics", hall: "C3", stand: "101", confirmed: true, source: "st.com events", match: /stmicro|^st$/i },
   { company: "Phoenix Contact", hall: "B3", stand: "103", confirmed: true, source: "phoenixcontact.com", match: /phoenix contact/i }
 ];
+var MAKER_BOOTHS = [
+  { kind: "manufacturer", company: "Infineon Technologies", hall: "C3", stand: "502", confirmed: false, note: "Double stand C3.501/502 per a trade-show guide", source: "tradeshowintel.com", match: /infineon/i },
+  { kind: "manufacturer", company: "STMicroelectronics", hall: "C3", stand: "101", confirmed: true, source: "st.com events", match: /stmicro|^st$/i },
+  { kind: "manufacturer", company: "Bosch", hall: "C3", stand: "316", confirmed: true, source: "bosch-semiconductors.com", match: /\bbosch\b/i },
+  { kind: "manufacturer", company: "Nexperia", hall: "C3", stand: "319", confirmed: false, note: "Stand of the 2022 and 2024 editions", source: "Nexperia electronica 2024", match: /nexperia/i },
+  { kind: "manufacturer", company: "Murata", hall: "C4", stand: "179", confirmed: true, source: "murata.com electronica 2026", match: /murata/i },
+  { kind: "manufacturer", company: "Analog Devices", hall: "C4", stand: "121", confirmed: false, note: "Per a trade-show guide", source: "tradeshowintel.com", match: /analog devices|\badi\b|linear tech|maxim/i },
+  { kind: "manufacturer", company: "Monolithic Power Systems", hall: "C4", stand: "241", confirmed: true, source: "monolithicpower.com events", match: /monolithic power|\bmps\b/i },
+  { kind: "manufacturer", company: "Vishay", hall: "C4", stand: "478", confirmed: false, note: "Stand of the 2024 edition", source: "Vishay electronica 2024", match: /vishay/i },
+  { kind: "manufacturer", company: "NXP", hall: "C5", stand: "179", confirmed: true, source: "nxp.com events", match: /\bnxp\b|freescale/i },
+  { kind: "manufacturer", company: "W\xFCrth Elektronik", hall: "B6", stand: "101", confirmed: true, source: "we-online.com electronica", match: /w(ü|u|ue)rth/i },
+  { kind: "manufacturer", company: "Phoenix Contact", hall: "B3", stand: "103", confirmed: true, source: "phoenixcontact.com", match: /phoenix contact/i }
+];
 function boothFor(supplier) {
   return BOOTHS.find((b) => b.match.test(supplier));
+}
+function makerBoothFor(manufacturer) {
+  return MAKER_BOOTHS.find((b) => b.match.test(manufacturer));
 }
 
 // src/model.ts
@@ -77,6 +93,30 @@ function supplierSpend(lines) {
   const suppliers = [...map.values()].sort((a, b) => b.spend - a.spend);
   for (const s of suppliers) s.share = total ? s.spend / total : 0;
   return { suppliers, total, unsourced };
+}
+function makerSpend(lines) {
+  const map = /* @__PURE__ */ new Map();
+  let total = 0;
+  for (const l of lines) {
+    if (!l.total || !l.manufacturer) continue;
+    total += l.total;
+    const k = key(l.manufacturer);
+    const cur = map.get(k) ?? { supplier: l.manufacturer, spend: 0, lines: 0, share: 0, booth: makerBoothFor(l.manufacturer), via: [], topLines: [] };
+    cur.spend += l.total;
+    cur.lines += 1;
+    cur.topLines.push(l);
+    const v = cur.via.find((x) => x.supplier === (l.supplier ?? "\u2014"));
+    if (v) v.spend += l.total;
+    else cur.via.push({ supplier: l.supplier ?? "\u2014", spend: l.total });
+    map.set(k, cur);
+  }
+  const out = [...map.values()].sort((a, b) => b.spend - a.spend);
+  for (const m of out) {
+    m.share = total ? m.spend / total : 0;
+    m.via.sort((a, b) => b.spend - a.spend);
+    m.topLines.sort((a, b) => b.total - a.total);
+  }
+  return out;
 }
 function hallSpend(suppliers) {
   const map = /* @__PURE__ */ new Map();
@@ -216,9 +256,9 @@ function blockerSummary(a) {
 function withinVolume(a, limit) {
   return a.contestable.filter((c) => c.move > 0 && c.move <= limit).reduce((s, c) => s + c.award, 0);
 }
-function mergePortfolio(results) {
+function mergePortfolio(results, currency) {
   const map = /* @__PURE__ */ new Map();
-  for (const r of results)
+  for (const r of results.filter((x) => !currency || !x.currency || x.currency === currency))
     for (const [name, v] of Object.entries(r.suppliers ?? {})) {
       const k = key(name);
       const cur = map.get(k) ?? { supplier: name, spend: 0, lines: 0, projects: 0 };
@@ -241,6 +281,7 @@ export {
   curve,
   hallSpend,
   key,
+  makerSpend,
   mergePortfolio,
   simulate,
   supplierSpend,

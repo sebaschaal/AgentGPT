@@ -59,7 +59,10 @@ export const ENTRANCES = [
     { id: 'east', label: 'Entrance East', x: 988, y: 189 },
 ];
 
+export type BoothKind = 'distributor' | 'manufacturer';
+
 export interface Booth {
+    kind?: BoothKind;
     company: string;
     hall: string;
     stand: string;
@@ -87,8 +90,27 @@ export const BOOTHS: Booth[] = [
     { company: 'Phoenix Contact', hall: 'B3', stand: '103', confirmed: true, source: 'phoenixcontact.com', match: /phoenix contact/i },
 ];
 
+// Component manufacturers: buyers meet them for project pricing (SPR), allocation and lifecycle, whoever distributes the part.
+export const MAKER_BOOTHS: Booth[] = [
+    { kind: 'manufacturer', company: 'Infineon Technologies', hall: 'C3', stand: '502', confirmed: false, note: 'Double stand C3.501/502 per a trade-show guide', source: 'tradeshowintel.com', match: /infineon/i },
+    { kind: 'manufacturer', company: 'STMicroelectronics', hall: 'C3', stand: '101', confirmed: true, source: 'st.com events', match: /stmicro|^st$/i },
+    { kind: 'manufacturer', company: 'Bosch', hall: 'C3', stand: '316', confirmed: true, source: 'bosch-semiconductors.com', match: /\bbosch\b/i },
+    { kind: 'manufacturer', company: 'Nexperia', hall: 'C3', stand: '319', confirmed: false, note: 'Stand of the 2022 and 2024 editions', source: 'Nexperia electronica 2024', match: /nexperia/i },
+    { kind: 'manufacturer', company: 'Murata', hall: 'C4', stand: '179', confirmed: true, source: 'murata.com electronica 2026', match: /murata/i },
+    { kind: 'manufacturer', company: 'Analog Devices', hall: 'C4', stand: '121', confirmed: false, note: 'Per a trade-show guide', source: 'tradeshowintel.com', match: /analog devices|\badi\b|linear tech|maxim/i },
+    { kind: 'manufacturer', company: 'Monolithic Power Systems', hall: 'C4', stand: '241', confirmed: true, source: 'monolithicpower.com events', match: /monolithic power|\bmps\b/i },
+    { kind: 'manufacturer', company: 'Vishay', hall: 'C4', stand: '478', confirmed: false, note: 'Stand of the 2024 edition', source: 'Vishay electronica 2024', match: /vishay/i },
+    { kind: 'manufacturer', company: 'NXP', hall: 'C5', stand: '179', confirmed: true, source: 'nxp.com events', match: /\bnxp\b|freescale/i },
+    { kind: 'manufacturer', company: 'Würth Elektronik', hall: 'B6', stand: '101', confirmed: true, source: 'we-online.com electronica', match: /w(ü|u|ue)rth/i },
+    { kind: 'manufacturer', company: 'Phoenix Contact', hall: 'B3', stand: '103', confirmed: true, source: 'phoenixcontact.com', match: /phoenix contact/i },
+];
+
 export function boothFor(supplier: string): Booth | undefined {
     return BOOTHS.find((b) => b.match.test(supplier));
+}
+
+export function makerBoothFor(manufacturer: string): Booth | undefined {
+    return MAKER_BOOTHS.find((b) => b.match.test(manufacturer));
 }
 
 export function hallById(id: string): Hall | undefined {

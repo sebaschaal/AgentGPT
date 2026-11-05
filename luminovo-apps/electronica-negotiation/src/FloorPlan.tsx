@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, Map as MapIcon, LayoutGrid, Play } from 'lucide-react';
-import { ENTRANCES, FAIR, HALLS, boothPoint, hallById } from './fair';
+import { CalendarClock, Factory, Map as MapIcon, LayoutGrid, Play, Truck } from 'lucide-react';
+import { ENTRANCES, FAIR, HALLS, boothPoint, hallById, type Booth } from './fair';
 import { money, initials } from './format';
 import type { HallSpend, SupplierSpend } from './model';
 
 export interface RouteStop {
     supplier: string;
+    kind?: 'distributor' | 'manufacturer';
+    booth?: Booth;
     objective?: string;
     ask?: string;
     minutes?: number;
@@ -33,9 +35,11 @@ interface Props {
     onSelect: (supplier: string | null) => void;
     route: RouteStop[] | null;
     loading?: boolean;
+    layer: 'distributors' | 'manufacturers';
+    onLayer: (layer: 'distributors' | 'manufacturers') => void;
 }
 
-export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, loading }: Props) {
+export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, loading, layer, onLayer }: Props) {
     const [cam, setCam] = useState<Camera>(START);
     const [view, setView] = useState<'overview' | 'top' | 'focus' | 'tour'>('overview');
     const [hoverHall, setHoverHall] = useState<string | null>(null);
@@ -68,6 +72,16 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
         });
     }, [onFloor]);
     const pointOf = (supplier: string) => placed.find((p) => p.s.supplier === supplier);
+    // A route stop may sit on the other layer (a manufacturer while distributors show): place it by its own booth.
+    const stopPoint = (r: RouteStop) => {
+        const p = pointOf(r.supplier);
+        if (p) return { x: p.x, y: p.y, booth: p.s.booth! };
+        if (r.booth) {
+            const b = boothPoint(r.booth);
+            return { x: b.x, y: b.y, booth: r.booth };
+        }
+        return undefined;
+    };
 
     useEffect(() => {
         if (!selected) return;
@@ -84,8 +98,8 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
         const west = ENTRANCES[0];
         const pts = [{ x: west.x, y: west.y, label: 'Start' }];
         route.forEach((r, i) => {
-            const p = pointOf(r.supplier);
-            if (p) pts.push({ x: p.x + 7, y: p.y + 7, label: String(i + 1) });
+            const p = stopPoint(r);
+            if (p) pts.push({ x: p.x + 10, y: p.y + 10, label: String(i + 1) });
         });
         return pts;
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,7 +133,7 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
         if (!route?.length) return;
         stopTour();
         setView('tour');
-        const stops = route.filter((r) => pointOf(r.supplier));
+        const stops = route.filter((r) => stopPoint(r));
         let i = 0;
         const step = () => {
             if (i >= stops.length) {
@@ -128,7 +142,7 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                 setView('overview');
                 return;
             }
-            const p = pointOf(stops[i].supplier)!;
+            const p = stopPoint(stops[i])!;
             setTourIdx(route.indexOf(stops[i]));
             setCam({ rx: 52, rz: -14 + (i % 2 ? 8 : -6), s: 1.7, cx: p.x, cy: p.y });
             i++;
@@ -237,7 +251,8 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                         </div>
                         <div className="hud-big">{money(atFair)}</div>
                         <div className="hud-sub">
-                            of {money(total)} selected spend sits with {onFloor.length} supplier{onFloor.length === 1 ? '' : 's'} on the floor
+                            of {money(total)} selected spend sits with {onFloor.length} {layer === 'distributors' ? 'distributor' : 'manufacturer'}
+                            {onFloor.length === 1 ? '' : 's'} on the floor
                         </div>
                     </>
                 )}
@@ -249,6 +264,16 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                         Doors open in {daysToFair} day{daysToFair === 1 ? '' : 's'}
                     </span>
                 )}
+                <div className="cam-buttons" role="group" aria-label="What the pillars show">
+                    <button className={layer === 'distributors' ? 'on' : ''} aria-pressed={layer === 'distributors'} onClick={() => (stopTour(), onLayer('distributors'))}>
+                        <Truck />
+                        Distributors
+                    </button>
+                    <button className={layer === 'manufacturers' ? 'on' : ''} aria-pressed={layer === 'manufacturers'} onClick={() => (stopTour(), onLayer('manufacturers'))}>
+                        <Factory />
+                        Manufacturers
+                    </button>
+                </div>
                 <div className="cam-buttons">
                     <button className={view === 'overview' ? 'on' : ''} onClick={() => (stopTour(), onSelect(null), setCam(OVERVIEW), setView('overview'))}>
                         <MapIcon />
@@ -283,10 +308,11 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                     <div>
                         <div className="tour-name">
                             {tourStop.supplier}
-                            {pointOf(tourStop.supplier) && (
+                            {stopPoint(tourStop) && (
                                 <span>
                                     {' '}
-                                    · {pointOf(tourStop.supplier)!.s.booth!.hall}.{pointOf(tourStop.supplier)!.s.booth!.stand}
+                                    · {stopPoint(tourStop)!.booth.hall}.{stopPoint(tourStop)!.booth.stand}
+                                    {tourStop.kind === 'manufacturer' ? ' · manufacturer' : ''}
                                 </span>
                             )}
                         </div>
@@ -296,7 +322,7 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                 </div>
             )}
             <div className="hud hud-bl">
-                <span className="legend-pillar" /> Selected spend in this project
+                <span className="legend-pillar" /> {layer === 'distributors' ? 'Selected spend per distributor' : 'Selected spend per manufacturer, through any distributor'}
                 <span className="legend-est" /> Stand of an earlier edition
                 <span className="legend-note">Schematic hall plan, not to scale</span>
             </div>

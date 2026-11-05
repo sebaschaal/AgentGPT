@@ -86,21 +86,35 @@ async function projects(input: Json) {
                     customer: d.customer?.name ?? '',
                     scenarios: d.sourcing_scenarios?.length ?? 0,
                     updated: d.creation_date,
+                    lines: d.design_items_count ?? null,
                 },
             ],
         };
     }
     const filter = q ? `AND (r.name ILIKE '%${q}%' OR c.name ILIKE '%${q}%')` : '';
     const rows = await warehouse(`
-        SELECT toString(r.id), r.name, coalesce(c.name, ''), count(s.id), toString(max(s.creation_date))
-        FROM customer_gold.sourcing_scenario s
-        JOIN customer_gold.rfq r ON r.id = s.rfq
-        LEFT JOIN customer_gold.customer c ON c.id = r.customer
-        WHERE r.is_archived = false ${filter}
-        GROUP BY r.id, r.name, c.name
-        ORDER BY max(s.creation_date) DESC
-        LIMIT 80`);
-    return { projects: rows.map(([id, name, customer, scenarios, updated]) => ({ id, name, customer, scenarios: num(scenarios), updated })) };
+        WITH p AS (
+            SELECT r.id AS rid, any(r.name) AS name, any(coalesce(c.name, '')) AS customer, count(s.id) AS scenarios, max(s.creation_date) AS updated
+            FROM customer_gold.sourcing_scenario s
+            JOIN customer_gold.rfq r ON r.id = s.rfq
+            LEFT JOIN customer_gold.customer c ON c.id = r.customer
+            WHERE r.is_archived = false ${filter}
+            GROUP BY r.id
+            ORDER BY updated DESC
+            LIMIT 80
+        ), l AS (
+            SELECT a.rfq AS rid, count() AS lines
+            FROM customer_gold.design_item d
+            JOIN customer_gold.assembly a ON a.id = d.assembly
+            WHERE a.rfq IN (SELECT rid FROM p)
+            GROUP BY a.rfq
+        )
+        SELECT toString(p.rid), p.name, p.customer, p.scenarios, toString(p.updated), coalesce(l.lines, 0)
+        FROM p LEFT JOIN l ON l.rid = p.rid
+        ORDER BY p.updated DESC`);
+    return {
+        projects: rows.map(([id, name, customer, scenarios, updated, lines]) => ({ id, name, customer, scenarios: num(scenarios), updated, lines: num(lines) })),
+    };
 }
 
 // ---------------------------------------------------------------- one project
@@ -456,7 +470,7 @@ async function plan(input: Json) {
     const prompt = `Project: ${JSON.stringify(input.project ?? {})}
 Currency: ${input.currency ?? 'EUR'}
 
-Suppliers with a stand at electronica 2026 (hall, stand, our numbers):
+Stands at electronica 2026 (type distributor or manufacturer, hall, stand, our numbers):
 ${JSON.stringify(input.stops ?? []).slice(0, 12000)}
 
 Suppliers in this project without a known stand:
@@ -465,7 +479,7 @@ ${JSON.stringify(input.offFloor ?? []).slice(0, 3000)}
 Hall layout: row A is north, row B in the middle, row C south; halls 1 to 6 run west to east. Entrance West is next to B0/A1/C1, Entrance East next to A6/B6/C6.`;
     const res = await complete({
         model: 'balanced',
-        instructions: `You plan a buyer's day at electronica. Rank the stands by negotiation value: project spend at stake, lines the supplier could win if they move a little on price (contestable volume and how much of it is within 10%), lines where a competitor is cheaper and they should match, cross-project spend that gives leverage, and how dependent the project is on them. Then order the route so the highest-value stops come first but the walk stays efficient (start at Entrance West, avoid crossing the fairground twice). Include every stand worth more than a courtesy visit, at most 8. Give each stop a concrete ask with a number. Do not repeat the hall or stand in the objective; the card shows it. Phrase every ask as what we ask the supplier to do ("Cut 6% on the four Infineon lines", "Match WinSource on AWR1843"), never as something we offer. Never mention data that is missing or was not provided; work with what is there. Round money to three significant figures with the currency symbol (for example €107M, €8.4M, €920k). Put suppliers without a stand, or not worth a visit, in remote with a follow-up action. Use the supplier names exactly as given. US English, plain and direct.`,
+        instructions: `You plan a buyer's day at electronica. Rank the stands by negotiation value: project spend at stake, lines the supplier could win if they move a little on price (contestable volume and how much of it is within 10%), lines where a competitor is cheaper and they should match, cross-project spend that gives leverage, and how dependent the project is on them. Then order the route so the highest-value stops come first but the walk stays efficient (start at Entrance West, avoid crossing the fairground twice). Include every stand worth more than a courtesy visit, at most 8. Give each stop a concrete ask with a number. Do not repeat the hall or stand in the objective; the card shows it. Phrase every ask as what we ask the supplier to do ("Cut 6% on the four Infineon lines", "Match WinSource on AWR1843"), never as something we offer. Never mention data that is missing or was not provided; work with what is there. Round money to three significant figures with the currency symbol (for example €107M, €8.4M, €920k). Stops of type manufacturer are component makers whose parts we buy through distributors: the ask there is a project price (SPR) registered through our main distributor, an allocation or lifecycle commitment, never a distributor price match; include a manufacturer only when its spend makes the visit worth it. Put suppliers without a stand, or not worth a visit, in remote with a follow-up action. Use the supplier names exactly as given. US English, plain and direct.`,
         prompt,
         schema: PLAN_SCHEMA,
         maxOutputTokens: 2500,

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useOpenExternal, useNotify } from '@luminovo/widget-sdk';
-import { Copy, MessageSquareQuote, Newspaper, RefreshCw, Sparkles, X } from 'lucide-react';
+import { useNotify } from '@luminovo/widget-sdk';
+import { Copy, MessageSquareQuote, Sparkles, X } from 'lucide-react';
 import { call, describeError } from './api';
 import { ConcessionChart, GapBuckets, MoveBar } from './charts';
-import { ago, initials, money, pct, qty, signedPct, unit } from './format';
+import { initials, money, pct, qty, signedPct, unit } from './format';
 import {
     analyse,
     bestStart,
@@ -20,14 +20,8 @@ import {
     type SupplierSpend,
 } from './model';
 import type { RouteStop } from './FloorPlan';
-
-export interface NewsState {
-    loading: boolean;
-    error?: string;
-    items?: { title: string; url: string; source: string; date: string | null; snippet: string }[];
-    via?: string | null;
-    summary?: { ticker?: { index: number; takeaway: string; tone: string }[]; opener?: string; hook?: string; error?: string; hint?: string } | null;
-}
+import { Headlines, NewsTicker, OpenerCard, type NewsState } from './news';
+export type { NewsState } from './news';
 
 interface Brief {
     stance: string;
@@ -57,7 +51,6 @@ type LineFilter = 'all' | 'held' | 'contest' | 'match' | 'none';
 
 export function SupplierView(p: Props) {
     const { supplier, lines, comp } = p;
-    const openExternal = useOpenExternal();
     const notify = useNotify();
     const [tab, setTab] = useState<'negotiate' | 'talk' | 'lines'>('negotiate');
     const [mode, setMode] = useState<Mode>('across');
@@ -185,11 +178,6 @@ export function SupplierView(p: Props) {
         });
     }, [a, bks, bucket, filter]);
 
-    const ticker = useMemo(() => {
-        const items = p.news?.items ?? [];
-        const notes = new Map((p.news?.summary?.ticker ?? []).map((t) => [t.index, t]));
-        return items.slice(0, 8).map((n, i) => ({ ...n, note: notes.get(i) }));
-    }, [p.news]);
 
     const notQuotedVolume = a.notQuoted.reduce((s, n) => s + n.award, 0);
     const nearLines = a.contestable.filter((c) => c.move > 0 && c.move <= 0.1).length;
@@ -230,7 +218,7 @@ export function SupplierView(p: Props) {
                 <div className="kpis">
                     <Kpi label="Spend in this project" value={money(supplier.spend)} sub={`${pct(supplier.share, 1)} of the project · ${supplier.lines} lines`} />
                     <Kpi
-                        label="Selected spend, all projects"
+                        label="Selected spend, last 60 projects"
                         value={p.portfolio ? money(p.portfolio.spend) : '…'}
                         sub={
                             p.portfolio
@@ -245,28 +233,7 @@ export function SupplierView(p: Props) {
                 </div>
             </div>
 
-            <div className="ticker" aria-live="polite">
-                <span className="ticker-tag">
-                    <Newspaper />
-                    {p.news?.loading ? 'Reading the news' : p.news?.via ? `Live from ${p.news.via}` : 'News'}
-                </span>
-                <div className="ticker-track">
-                    {ticker.length ? (
-                        <div className="ticker-move" style={{ animationDuration: `${Math.max(30, ticker.length * 9)}s` }}>
-                            {[...ticker, ...ticker].map((t, i) => (
-                                <button key={i} className="ticker-item" onClick={() => t.url && openExternal(t.url)}>
-                                    <i className={`tone tone--${t.note?.tone ?? 'neutral'}`} />
-                                    <b>{t.source || 'News'}</b> {t.title}
-                                    {t.note && <em> · {t.note.takeaway}</em>}
-                                    <span className="ticker-date">{ago(t.date)}</span>
-                                </button>
-                            ))}
-                        </div>
-                    ) : (
-                        <span className="ticker-empty">{p.news?.loading ? 'Pulling recent headlines and summarizing them for your opener' : 'No recent headlines found'}</span>
-                    )}
-                </div>
-            </div>
+            <NewsTicker news={p.news} />
 
             <div className="tabs-row">
                 <div className="tabs tabs-line" role="tablist">
@@ -292,52 +259,23 @@ export function SupplierView(p: Props) {
 
             {tab === 'talk' && (
                 <div className="talk">
-                    <div className="card pad group opener-card">
-                        <div className="subhead">
-                            <h3>Open with</h3>
-                            <button className="btn btn-secondary btn-sm" onClick={p.loadNews} disabled={p.news?.loading}>
-                                <RefreshCw />
-                                Refresh
-                            </button>
-                        </div>
-                        {p.news?.loading && <div className="shimmer" />}
-                        {p.news?.error && <p className="error text-body-md">{p.news.error}</p>}
-                        {p.news?.summary?.opener && <blockquote>{p.news.summary.opener}</blockquote>}
-                        {p.news?.summary?.hook && (
-                            <p className="text-body-md">
-                                <b>Bridge to business:</b> {p.news.summary.hook}
-                            </p>
-                        )}
-                        {p.news?.summary?.error && <p className="error text-body-md">{p.news.summary.hint ?? 'The AI summary is unavailable right now.'}</p>}
-                        <p className="text-body-md text-muted">
-                            You buy <b>{money(supplier.spend)}</b> from them on this project
-                            {p.portfolio ? (
-                                <>
-                                    {' '}
-                                    and <b>{money(p.portfolio.spend)}</b> across {p.portfolio.projects} projects
-                                </>
-                            ) : null}
-                            .
-                        </p>
-                    </div>
-                    <div className="card pad">
-                        <div className="subhead">
-                            <h3>Headlines</h3>
-                            <span className="meta">{p.news?.via ?? ''}</span>
-                        </div>
-                        <div className="news-list">
-                            {(p.news?.items ?? []).slice(0, 8).map((n, i) => (
-                                <button key={i} className="news-item" onClick={() => n.url && openExternal(n.url)}>
-                                    <span className="news-src">
-                                        {n.source} · {ago(n.date)}
-                                    </span>
-                                    <span className="news-title">{n.title}</span>
-                                    {n.snippet && <span>{n.snippet}</span>}
-                                </button>
-                            ))}
-                            {!p.news?.loading && !(p.news?.items ?? []).length && <p className="text-body-md text-muted">No recent headlines found for {supplier.supplier}.</p>}
-                        </div>
-                    </div>
+                    <OpenerCard
+                        news={p.news}
+                        onRefresh={p.loadNews}
+                        facts={
+                            <>
+                                You buy <b>{money(supplier.spend)}</b> from them on this project
+                                {p.portfolio ? (
+                                    <>
+                                        {' '}
+                                        and <b>{money(p.portfolio.spend)}</b> across {p.portfolio.projects} projects
+                                    </>
+                                ) : null}
+                                .
+                            </>
+                        }
+                    />
+                    <Headlines news={p.news} name={supplier.supplier} />
                 </div>
             )}
 

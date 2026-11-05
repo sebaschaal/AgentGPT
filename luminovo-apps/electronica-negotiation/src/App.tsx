@@ -4,13 +4,16 @@ import { ChevronDown, Sparkles, CircleAlert } from 'lucide-react';
 import { call, describeError } from './api';
 import { FloorPlan, type RouteStop } from './FloorPlan';
 import { SupplierView, type NewsState } from './SupplierView';
+import { MakerView } from './MakerView';
 import { FAIR, hallById } from './fair';
 import { ago, initials, money, pct } from './format';
 import { setCurrency } from './format';
 import {
     analyse,
+    blockerSummary,
     curve,
     hallSpend,
+    makerSpend,
     key,
     mergePortfolio,
     supplierSpend,
@@ -27,6 +30,7 @@ interface ProjectRow {
     customer: string;
     scenarios: number;
     updated: string;
+    lines?: number | null;
 }
 
 interface Plan {
@@ -64,9 +68,10 @@ export function App() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
+    const [layer, setLayer] = useState<'distributors' | 'manufacturers'>('distributors');
     const [comp, setComp] = useState<Map<string, CompLine>>(new Map());
     const [compProgress, setCompProgress] = useState({ done: 0, total: 0 });
-    const [portfolio, setPortfolio] = useState<Map<string, PortfolioEntry>>(new Map());
+    const [portfolioRaw, setPortfolioRaw] = useState<any[]>([]);
     const [portfolioProgress, setPortfolioProgress] = useState({ done: 0, total: 0 });
     const [plan, setPlan] = useState<{ loading: boolean; data?: Plan; error?: string }>({ loading: false });
     const [news, setNews] = useState<Record<string, NewsState>>({});
@@ -84,7 +89,9 @@ export function App() {
         call<{ projects: ProjectRow[] }>('projects', {})
             .then((r) => {
                 setProjects(r.projects);
-                if (!fromUrl) setRfqId(r.projects.find((p) => p.id === remembered)?.id ?? r.projects[0]?.id ?? null);
+                // Remembered project first, then the most recent one with a real BOM, so the demo never opens on a test stub.
+                if (!fromUrl)
+                    setRfqId(r.projects.find((p) => p.id === remembered)?.id ?? r.projects.find((p) => (p.lines ?? 0) >= 30)?.id ?? r.projects[0]?.id ?? null);
             })
             .catch((e) => setProjectsError(describeError(e)));
         loadPortfolio();
@@ -183,7 +190,7 @@ export function App() {
                     try {
                         const r = await call<{ results: any[] }>('portfolio', { scenarioIds: b });
                         results.push(...r.results);
-                        setPortfolio(mergePortfolio(results));
+                        setPortfolioRaw([...results]);
                     } catch {}
                     setPortfolioProgress((p) => ({ ...p, done: Math.min(p.total, p.done + b.length) }));
                 }
@@ -196,11 +203,17 @@ export function App() {
 
     // ------------------------------------------------------------ derived
     const spend = useMemo(() => (data ? supplierSpend(data.lines) : { suppliers: [], total: 0, unsourced: 0 }), [data]);
-    const halls = useMemo(() => hallSpend(spend.suppliers), [spend]);
+    const makers = useMemo(() => (data ? makerSpend(data.lines) : []), [data]);
+    // The map shows one layer at a time; the route can mix distributors and manufacturers.
+    const entities = layer === 'distributors' ? spend.suppliers : makers;
+    const halls = useMemo(() => hallSpend(entities), [entities]);
     const onFloor = spend.suppliers.filter((s) => s.booth);
     const offFloor = spend.suppliers.filter((s) => !s.booth);
-    const sel = spend.suppliers.find((s) => s.supplier === selected) ?? null;
+    const makersOnFloor = makers.filter((m) => m.booth);
+    const sel = layer === 'distributors' ? spend.suppliers.find((s) => s.supplier === selected) ?? null : null;
+    const selMaker = layer === 'manufacturers' ? makers.find((m) => m.supplier === selected) ?? null : null;
     const compDone = compProgress.total > 0 && compProgress.done >= compProgress.total;
+    const portfolio = useMemo(() => mergePortfolio(portfolioRaw, data?.project.currency), [portfolioRaw, data?.project.currency]);
 
     const analyses = useMemo(() => {
         const m = new Map<string, ReturnType<typeof analyse>>();
@@ -209,41 +222,46 @@ export function App() {
         return m;
     }, [data, comp, spend]);
 
+    const newsKey = (kind: 'distributors' | 'manufacturers', name: string) => `${kind}:${name}`;
     const loadNews = useCallback(
-        (supplier: string) => {
-            const s = spend.suppliers.find((x) => x.supplier === supplier);
-            const a = analyses.get(supplier);
-            const pf = portfolio.get(key(supplier));
-            setNews((n) => ({ ...n, [supplier]: { loading: true } }));
+        (kind: 'distributors' | 'manufacturers', name: string) => {
+            const k = newsKey(kind, name);
+            const ent = kind === 'distributors' ? spend.suppliers.find((x) => x.supplier === name) : makers.find((x) => x.supplier === name);
+            const a = kind === 'distributors' ? analyses.get(name) : undefined;
+            const pf = kind === 'distributors' ? portfolio.get(key(name)) : undefined;
+            setNews((n) => ({ ...n, [k]: { loading: true } }));
             call('news', {
-                supplier,
-                query: s?.booth?.company.replace(/\s*\(.*\)/, '') ?? supplier,
+                supplier: name,
+                query: ent?.booth?.company.replace(/\s*\(.*\)/, '') ?? name,
                 facts: {
+                    role: kind === 'distributors' ? 'distributor' : 'component manufacturer',
                     project: data?.project.name,
-                    projectSpend: s ? Math.round(s.spend) : null,
-                    shareOfProject: s ? pct(s.share, 1) : null,
-                    linesHeld: a?.held.length,
+                    projectSpend: ent ? Math.round(ent.spend) : null,
+                    shareOfProject: ent ? pct(ent.share, 1) : null,
+                    linesHeld: a?.held.length ?? ent?.lines,
                     crossProjectSpend: pf ? Math.round(pf.spend) : null,
-                    stand: s?.booth ? `${s.booth.hall}.${s.booth.stand}` : null,
+                    stand: ent?.booth ? `${ent.booth.hall}.${ent.booth.stand}` : null,
                     currency: data?.project.currency,
                 },
             })
-                .then((r: any) => setNews((n) => ({ ...n, [supplier]: { loading: false, items: r.items, via: r.via, summary: r.summary } })))
-                .catch((e) => setNews((n) => ({ ...n, [supplier]: { loading: false, error: describeError(e) } })));
+                .then((r: any) => setNews((n) => ({ ...n, [k]: { loading: false, items: r.items, via: r.via, summary: r.summary } })))
+                .catch((e) => setNews((n) => ({ ...n, [k]: { loading: false, error: describeError(e) } })));
         },
-        [spend, analyses, portfolio, data],
+        [spend, makers, analyses, portfolio, data],
     );
 
     async function makePlan() {
         if (!data) return;
         setPlan({ loading: true });
         try {
-            const stops = onFloor.map((s) => {
+            const stops: any[] = onFloor.map((s) => {
                 const a = analyses.get(s.supplier)!;
                 const sw = sweetSpot(curve(a, 'across'));
                 const pf = portfolio.get(key(s.supplier));
+                const nb = a.contestable.filter((c) => c.move <= 0);
                 return {
                     supplier: s.supplier,
+                    type: 'distributor',
                     hall: s.booth!.hall,
                     stand: s.booth!.stand,
                     standConfirmed: s.booth!.confirmed,
@@ -253,11 +271,26 @@ export function App() {
                     crossProjectSpend: pf ? Math.round(pf.spend) : null,
                     crossProjects: pf?.projects ?? null,
                     lostLinesWithin10pct: { lines: a.contestable.filter((c) => c.move > 0 && c.move <= 0.1).length, volume: Math.round(withinVolume(a, 0.1)) },
+                    cheapestButNotAwarded: nb.length ? { lines: nb.length, volume: Math.round(nb.reduce((x, c) => x + c.award, 0)), reasons: blockerSummary(a).map((b) => `${b.reason} (${b.count})`) } : null,
                     priceMatchSavings: Math.round(a.matchSavings),
                     notQuotedVolume: Math.round(a.notQuoted.reduce((x, n) => x + n.award, 0)),
                     bestMoveForThem: sw.net > 0 ? { discount: pct(sw.d, 1), linesWon: sw.wonLines, netGain: Math.round(sw.net) } : null,
                 };
             });
+            // The three biggest manufacturers with a stand: project pricing and allocation talks.
+            for (const m of makersOnFloor.slice(0, 3))
+                stops.push({
+                    supplier: m.supplier,
+                    type: 'manufacturer',
+                    hall: m.booth!.hall,
+                    stand: m.booth!.stand,
+                    standConfirmed: m.booth!.confirmed,
+                    projectSpend: Math.round(m.spend),
+                    shareOfProject: pct(m.share, 1),
+                    lines: m.lines,
+                    boughtThrough: m.via.slice(0, 3).map((v) => `${v.supplier} ${Math.round(v.spend)}`),
+                    topParts: m.topLines.slice(0, 3).map((l) => l.mpn),
+                });
             const res = await call<{ plan: Plan | null }>('plan', {
                 project: { name: data.project.name, customer: data.project.customer, selectedSpend: Math.round(spend.total) },
                 currency: data.project.currency,
@@ -266,9 +299,16 @@ export function App() {
             });
             const p = res.plan;
             if (!p) throw new Error('The model returned no plan. Try again.');
-            const names = new Map(onFloor.map((s) => [key(s.supplier), s.supplier]));
+            const all = [
+                ...onFloor.map((s) => ({ name: s.supplier, kind: 'distributor' as const, booth: s.booth })),
+                ...makersOnFloor.map((m) => ({ name: m.supplier, kind: 'manufacturer' as const, booth: m.booth })),
+            ];
+            const resolve = (n: string) => all.find((x) => key(x.name) === key(n)) ?? all.find((x) => key(x.name).includes(key(n)) || key(n).includes(key(x.name)));
             const route = p.route
-                .map((r) => ({ ...r, supplier: names.get(key(r.supplier)) ?? onFloor.find((s) => key(s.supplier).includes(key(r.supplier)) || key(r.supplier).includes(key(s.supplier)))?.supplier ?? '' }))
+                .map((r) => {
+                    const hit = resolve(r.supplier);
+                    return { ...r, supplier: hit?.name ?? '', kind: hit?.kind, booth: hit?.booth };
+                })
                 .filter((r, i, arr) => r.supplier && arr.findIndex((x) => x.supplier === r.supplier) === i);
             setPlan({ loading: false, data: { ...p, route } });
         } catch (e) {
@@ -282,7 +322,12 @@ export function App() {
         return i >= 0 ? { ...plan.data!.route[i], index: i } : undefined;
     };
     const currentProject = projects?.find((p) => p.id === rfqId);
-    const maxSup = Math.max(1, ...spend.suppliers.map((s) => s.spend));
+    const maxSup = Math.max(1, ...entities.map((s) => s.spend));
+    const openStop = (r: RouteStop) => {
+        const want = r.kind === 'manufacturer' ? 'manufacturers' : 'distributors';
+        if (want !== layer) setLayer(want);
+        setSelected(r.supplier);
+    };
 
     if (!slotToken) return <div className="boot">Loading…</div>;
 
@@ -324,7 +369,8 @@ export function App() {
                                             >
                                                 <span className="picker-row-name">{p.name}</span>
                                                 <span className="picker-row-sub">
-                                                    {p.customer || 'No customer'} · {p.scenarios} scenario{p.scenarios === 1 ? '' : 's'} · {ago(p.updated)}
+                                                    {p.customer || 'No customer'} · {p.lines != null ? `${p.lines} BOM lines · ` : ''}
+                                                    {p.scenarios} scenario{p.scenarios === 1 ? '' : 's'} · {ago(p.updated)}
                                                 </span>
                                             </button>
                                         ))}
@@ -369,7 +415,20 @@ export function App() {
                 </div>
             )}
 
-            <FloorPlan suppliers={spend.suppliers} halls={halls} total={spend.total} selected={selected} onSelect={setSelected} route={routeStops} loading={loading} />
+            <FloorPlan
+                suppliers={entities}
+                halls={halls}
+                total={spend.total}
+                selected={selected}
+                onSelect={setSelected}
+                route={routeStops}
+                loading={loading}
+                layer={layer}
+                onLayer={(l) => {
+                    setSelected(null);
+                    setLayer(l);
+                }}
+            />
 
             {sel && data ? (
                 <SupplierView
@@ -382,8 +441,19 @@ export function App() {
                     projectName={data.project.name}
                     projectTotal={spend.total}
                     stop={stopFor(sel.supplier)}
-                    news={news[sel.supplier]}
-                    loadNews={() => loadNews(sel.supplier)}
+                    news={news[newsKey('distributors', sel.supplier)]}
+                    loadNews={() => loadNews('distributors', sel.supplier)}
+                    onClose={() => setSelected(null)}
+                />
+            ) : selMaker && data ? (
+                <MakerView
+                    maker={selMaker}
+                    comp={comp}
+                    compProgress={compProgress}
+                    projectName={data.project.name}
+                    stop={stopFor(selMaker.supplier)}
+                    news={news[newsKey('manufacturers', selMaker.supplier)]}
+                    loadNews={() => loadNews('manufacturers', selMaker.supplier)}
                     onClose={() => setSelected(null)}
                 />
             ) : (
@@ -419,15 +489,18 @@ export function App() {
                             <>
                                 <div className="cards">
                                     {plan.data.route.map((r, i) => {
-                                        const s = onFloor.find((x) => x.supplier === r.supplier)!;
-                                        const a = analyses.get(r.supplier);
+                                        const isMaker = r.kind === 'manufacturer';
+                                        const s = isMaker ? makers.find((x) => x.supplier === r.supplier) : onFloor.find((x) => x.supplier === r.supplier);
+                                        if (!s) return null;
+                                        const a = isMaker ? undefined : analyses.get(r.supplier);
                                         return (
-                                            <button key={r.supplier} className="battle" onClick={() => setSelected(r.supplier)} style={{ animationDelay: `${i * 90}ms` }}>
+                                            <button key={r.supplier} className="battle" onClick={() => openStop(r)} style={{ animationDelay: `${i * 90}ms` }}>
                                                 <div className="battle-top">
                                                     <span className="battle-num">{i + 1}</span>
                                                     <span className="battle-where">
                                                         Hall {s.booth!.hall} · {s.booth!.stand}
                                                     </span>
+                                                    {isMaker && <span className="badge badge-outline neutral">Manufacturer</span>}
                                                     <span className="battle-min">{r.minutes} min</span>
                                                 </div>
                                                 <div className="battle-name">{r.supplier}</div>
@@ -439,7 +512,7 @@ export function App() {
                                                 </div>
                                                 <div className="battle-stats">
                                                     <span>
-                                                        <b>{money(s.spend)}</b> project
+                                                        <b>{money(s.spend)}</b> {isMaker ? 'of their parts' : 'project'}
                                                     </span>
                                                     {a && withinVolume(a, 0.1) > 0 && (
                                                         <span>
@@ -518,12 +591,12 @@ export function App() {
                         </section>
                         <section className="card pad group">
                             <div className="subhead">
-                                <h3>Suppliers in this project</h3>
-                                <span className="meta">{spend.suppliers.length}</span>
+                                <h3>{layer === 'distributors' ? 'Distributors in this project' : 'Manufacturers in this project'}</h3>
+                                <span className="meta">{entities.length}</span>
                             </div>
                             <div className="sup-list">
-                                {spend.suppliers.map((s) => {
-                                    const pf = portfolio.get(key(s.supplier));
+                                {entities.slice(0, 25).map((s) => {
+                                    const pf = layer === 'distributors' ? portfolio.get(key(s.supplier)) : undefined;
                                     return (
                                         <button key={s.supplier} className="sup-row" onClick={() => setSelected(s.supplier)}>
                                             <span className={`sup-dot${s.booth ? '' : ' off'}`}>{initials(s.supplier)}</span>
@@ -538,7 +611,7 @@ export function App() {
                                             </span>
                                             <span className="sup-row-val">
                                                 {money(s.spend)}
-                                                <em>{pf ? `${money(pf.spend)} all projects` : pct(s.share, 1)}</em>
+                                                <em>{pf ? `${money(pf.spend)} across projects` : `${pct(s.share, 1)} of the project`}</em>
                                             </span>
                                         </button>
                                     );
