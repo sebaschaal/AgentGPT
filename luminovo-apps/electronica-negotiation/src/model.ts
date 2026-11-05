@@ -108,6 +108,17 @@ export interface Contestable {
     award: number; // current winning total
     winner: string | null;
     move: number; // price cut they need to win: 1 - award / theirs; <= 0 means they are already cheapest
+    blocker: string | null; // why a cheaper offer was not awarded
+}
+
+// Why the cheapest offer did not win the line: the scenario's rules weigh more than price.
+export function blockerOf(theirs: Option, line: Line): string | null {
+    if (theirs.tags.includes('SupplierNotApproved')) return 'not an approved supplier';
+    if (theirs.tags.includes('UnknownLeadTime') || theirs.leadDays === null) return 'lead time unknown';
+    if (line.leadDays !== null && theirs.leadDays > line.leadDays + 7) return `lead time ${theirs.leadDays} vs ${line.leadDays} days`;
+    if (theirs.tags.includes('LongLeadTime')) return 'long lead time';
+    if (line.manual) return 'manual pick by the buyer';
+    return 'scenario preference';
 }
 
 export interface NotQuoted {
@@ -152,7 +163,10 @@ export function analyse(supplier: string, lines: Line[], comp: Map<string, CompL
         }
         if (!line.total) continue;
         const theirs = opts.filter((o) => key(o.supplier) === k).sort((a, b) => a.total - b.total)[0];
-        if (theirs) contestable.push({ line, theirs, award: line.total, winner: line.supplier, move: 1 - line.total / theirs.total });
+        if (theirs) {
+            const move = 1 - line.total / theirs.total;
+            contestable.push({ line, theirs, award: line.total, winner: line.supplier, move, blocker: move <= 0 ? blockerOf(theirs, line) : null });
+        }
         else notQuoted.push({ line, award: line.total });
     }
     contestable.sort((a, b) => a.move - b.move);
@@ -242,6 +256,19 @@ export function buckets(a: SupplierAnalysis) {
         const items = a.contestable.filter((c) => b.test(c.move));
         return { ...b, count: items.length, volume: items.reduce((s, c) => s + c.award, 0), items };
     });
+}
+
+export function blockerSummary(a: SupplierAnalysis) {
+    const m = new Map<string, { reason: string; count: number; volume: number }>();
+    for (const c of a.contestable) {
+        if (c.move > 0 || !c.blocker) continue;
+        const k = c.blocker.startsWith('lead time ') && /\d/.test(c.blocker) ? 'longer lead time' : c.blocker;
+        const cur = m.get(k) ?? { reason: k, count: 0, volume: 0 };
+        cur.count++;
+        cur.volume += c.award;
+        m.set(k, cur);
+    }
+    return [...m.values()].sort((x, y) => y.volume - x.volume);
 }
 
 export function withinVolume(a: SupplierAnalysis, limit: number) {

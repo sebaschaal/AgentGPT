@@ -6,6 +6,7 @@ import { ago, initials, money, pct, qty, signedPct, unit } from './format';
 import {
     analyse,
     bestStart,
+    blockerSummary,
     buckets,
     curve,
     simulate,
@@ -71,6 +72,7 @@ export function SupplierView(p: Props) {
     const sim = simulate(a, d, mode);
     const bks = useMemo(() => buckets(a), [a]);
     const within10 = withinVolume(a, 0.1);
+    const blockers = useMemo(() => blockerSummary(a), [a]);
     const scanning = p.compProgress.done < p.compProgress.total;
 
     useEffect(() => {
@@ -122,7 +124,8 @@ export function SupplierView(p: Props) {
                 alreadyCheapestButNotAwarded: a.contestable
                     .filter((c) => c.move <= 0)
                     .slice(0, 5)
-                    .map((c) => ({ mpn: c.line.mpn, volume: Math.round(c.award), theirLeadDays: c.theirs.leadDays, winnerLeadDays: c.line.leadDays, tags: c.theirs.tags })),
+                    .map((c) => ({ mpn: c.line.mpn, volume: Math.round(c.award), whyNotAwarded: c.blocker, theirLeadDays: c.theirs.leadDays, winnerLeadDays: c.line.leadDays })),
+                cheapestButNotAwardedSummary: blockers.map((b) => ({ reason: b.reason, lines: b.count, volume: Math.round(b.volume) })),
                 priceMatchAsks: a.matchAsks.slice(0, 8).map((h) => ({ mpn: h.line.mpn, volume: Math.round(h.award), cheaperCompetitor: h.alt?.supplier, competitorBelowBy: pct(-h.cushion!, 1), savings: Math.round(h.award - h.alt!.total) })),
                 linesToDefend: a.defend.slice(0, 5).map((h) => ({ mpn: h.line.mpn, volume: Math.round(h.award), nextBest: h.alt?.supplier, lead: pct(h.cushion!, 1) })),
                 notQuoted: { lines: a.notQuoted.length, volume: Math.round(a.notQuoted.reduce((s, n) => s + n.award, 0)), top: a.notQuoted.slice(0, 5).map((n) => ({ mpn: n.line.mpn, volume: Math.round(n.award), currentSupplier: n.line.supplier })) },
@@ -164,12 +167,12 @@ export function SupplierView(p: Props) {
     }
 
     const rows = useMemo(() => {
-        type Row = { id: string; line: Line; kind: 'held' | 'contest' | 'none'; award: number; theirUnit: number | null; ref: string; refUnit: number | null; move: number | null; cushion: number | null };
+        type Row = { id: string; line: Line; kind: 'held' | 'contest' | 'none'; award: number; theirUnit: number | null; ref: string; refUnit: number | null; move: number | null; cushion: number | null; blocker?: string | null; altApproved?: boolean };
         const out: Row[] = [];
         for (const h of a.held)
-            out.push({ id: h.line.id, line: h.line, kind: 'held', award: h.award, theirUnit: h.line.unitPrice, ref: h.alt?.supplier ?? '—', refUnit: h.alt?.unit ?? null, move: null, cushion: h.cushion });
+            out.push({ id: h.line.id, line: h.line, kind: 'held', award: h.award, theirUnit: h.line.unitPrice, ref: h.alt?.supplier ?? '—', refUnit: h.alt?.unit ?? null, move: null, cushion: h.cushion, altApproved: h.altApproved });
         for (const c of a.contestable)
-            out.push({ id: c.line.id, line: c.line, kind: 'contest', award: c.award, theirUnit: c.theirs.unit, ref: c.winner ?? '—', refUnit: c.line.unitPrice, move: c.move, cushion: null });
+            out.push({ id: c.line.id, line: c.line, kind: 'contest', award: c.award, theirUnit: c.theirs.unit, ref: c.winner ?? '—', refUnit: c.line.unitPrice, move: c.move, cushion: null, blocker: c.blocker });
         for (const n of a.notQuoted)
             out.push({ id: n.line.id, line: n.line, kind: 'none', award: n.award, theirUnit: null, ref: n.line.supplier ?? '—', refUnit: n.line.unitPrice, move: null, cushion: null });
         const bk = bks.find((b) => b.id === bucket);
@@ -434,6 +437,21 @@ export function SupplierView(p: Props) {
                                     if (id) setTab('lines');
                                 }}
                             />
+                            {blockers.length > 0 && (
+                                <div className="blockers">
+                                    <div className="eyebrow">Cheapest but not awarded, because of</div>
+                                    {blockers.map((b) => (
+                                        <div key={b.reason} className="blocker">
+                                            <span>{b.reason}</span>
+                                            <b>{money(b.volume)}</b>
+                                            <em>
+                                                {b.count} line{b.count === 1 ? '' : 's'}
+                                            </em>
+                                        </div>
+                                    ))}
+                                    <p className="small muted">Fix these and they win on price alone: ask for stock, a shorter lead time or the approval paperwork.</p>
+                                </div>
+                            )}
                         </div>
                         <div className="card">
                             <h3>Ask them to match</h3>
@@ -576,10 +594,14 @@ export function SupplierView(p: Props) {
                                         {r.kind === 'none' && <span className="chip chip--neutral">Not quoted</span>}
                                     </td>
                                     <td className="num">{r.theirUnit !== null ? unit(r.theirUnit) : '—'}</td>
-                                    <td>{r.kind === 'held' ? r.ref : r.kind === 'contest' ? r.ref : r.ref}</td>
+                                    <td>
+                                        {r.ref}
+                                        {r.kind === 'held' && r.ref !== '—' && !r.altApproved && <div className="muted small">not approved</div>}
+                                    </td>
                                     <td className="num">{r.refUnit !== null ? unit(r.refUnit) : '—'}</td>
                                     <td>
                                         {r.kind === 'contest' && r.move !== null && <MoveBar move={r.move} />}
+                                        {r.kind === 'contest' && r.blocker && <div className="muted small">{r.blocker}</div>}
                                         {r.kind === 'held' &&
                                             (r.cushion === null ? (
                                                 <span className="muted small">no alternative</span>

@@ -29,7 +29,8 @@ export function unit(v: number, cur?: string) {
 }
 
 export const pct = (v: number, digits = 0) => `${(v * 100).toFixed(digits)}%`;
-export const signedPct = (v: number, digits = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(digits)}%`;
+export const signedPct = (v: number, digits = 1) =>
+    v >= 2 ? `×${(1 + v).toFixed(1)}` : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v * 100).toFixed(digits)}%`;
 export const qty = (v: number) => new Intl.NumberFormat('en-US', { notation: v >= 100000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(v);
 
 export function ago(iso: string | null) {

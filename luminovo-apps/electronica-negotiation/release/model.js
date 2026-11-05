@@ -90,6 +90,14 @@ function hallSpend(suppliers) {
   return [...map.values()].sort((a, b) => b.spend - a.spend);
 }
 var approved = (o) => !o.tags.includes("SupplierNotApproved");
+function blockerOf(theirs, line) {
+  if (theirs.tags.includes("SupplierNotApproved")) return "not an approved supplier";
+  if (theirs.tags.includes("UnknownLeadTime") || theirs.leadDays === null) return "lead time unknown";
+  if (line.leadDays !== null && theirs.leadDays > line.leadDays + 7) return `lead time ${theirs.leadDays} vs ${line.leadDays} days`;
+  if (theirs.tags.includes("LongLeadTime")) return "long lead time";
+  if (line.manual) return "manual pick by the buyer";
+  return "scenario preference";
+}
 function analyse(supplier, lines, comp) {
   const k = key(supplier);
   const held = [];
@@ -115,8 +123,10 @@ function analyse(supplier, lines, comp) {
     }
     if (!line.total) continue;
     const theirs = opts.filter((o) => key(o.supplier) === k).sort((a, b) => a.total - b.total)[0];
-    if (theirs) contestable.push({ line, theirs, award: line.total, winner: line.supplier, move: 1 - line.total / theirs.total });
-    else notQuoted.push({ line, award: line.total });
+    if (theirs) {
+      const move = 1 - line.total / theirs.total;
+      contestable.push({ line, theirs, award: line.total, winner: line.supplier, move, blocker: move <= 0 ? blockerOf(theirs, line) : null });
+    } else notQuoted.push({ line, award: line.total });
   }
   contestable.sort((a, b) => a.move - b.move);
   notQuoted.sort((a, b) => b.award - a.award);
@@ -182,6 +192,18 @@ function buckets(a) {
     return { ...b, count: items.length, volume: items.reduce((s, c) => s + c.award, 0), items };
   });
 }
+function blockerSummary(a) {
+  const m = /* @__PURE__ */ new Map();
+  for (const c of a.contestable) {
+    if (c.move > 0 || !c.blocker) continue;
+    const k = c.blocker.startsWith("lead time ") && /\d/.test(c.blocker) ? "longer lead time" : c.blocker;
+    const cur = m.get(k) ?? { reason: k, count: 0, volume: 0 };
+    cur.count++;
+    cur.volume += c.award;
+    m.set(k, cur);
+  }
+  return [...m.values()].sort((x, y) => y.volume - x.volume);
+}
 function withinVolume(a, limit) {
   return a.contestable.filter((c) => c.move > 0 && c.move <= limit).reduce((s, c) => s + c.award, 0);
 }
@@ -203,6 +225,8 @@ export {
   BUCKETS,
   analyse,
   bestStart,
+  blockerOf,
+  blockerSummary,
   boothFor,
   buckets,
   curve,

@@ -1729,3 +1729,25 @@ h3 {
     font-weight: 600;
     color: var(--p8);
 }
+
+.blockers {
+    margin-top: 12px;
+    border-top: 1px solid var(--n2);
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.blocker {
+    display: grid;
+    grid-template-columns: 1fr auto 56px;
+    gap: 8px;
+    font-size: 13px;
+    align-items: baseline;
+}
+.blocker em {
+    font-style: normal;
+    font-size: 11px;
+    color: var(--n6);
+    text-align: right;
+}
