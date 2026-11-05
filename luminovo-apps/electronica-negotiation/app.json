@@ -113,6 +113,33 @@
           }
         }
       }
+    },
+    {
+      "id": "open-from-bom",
+      "name": {
+        "en": "electronica negotiation"
+      },
+      "kind": "button",
+      "slotIds": [
+        "slots.bom.import.buttons",
+        "slots.flexible-calculation.buttons"
+      ],
+      "paramsSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "action": {
+        "type": "navigate",
+        "to": {
+          "widget": "floor"
+        },
+        "params": {
+          "project": {
+            "slot": "projectId"
+          }
+        }
+      }
     }
   ],
   "workflows": []
