@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useWidgetContext } from '@luminovo/widget-sdk';
+import { ChevronDown, Sparkles, CircleAlert } from 'lucide-react';
 import { call, describeError } from './api';
 import { FloorPlan, type RouteStop } from './FloorPlan';
 import { SupplierView, type NewsState } from './SupplierView';
@@ -286,71 +287,87 @@ export function App() {
     if (!slotToken) return <div className="boot">Loading…</div>;
 
     return (
-        <div className="app">
-            <header className="topbar">
-                <div className="brand">
-                    <span className="brand-mark">e</span>
-                    <div>
-                        <div className="brand-name">electronica negotiation</div>
-                        <div className="brand-sub">Face-to-face supplier negotiations at {FAIR.name}</div>
+        <div className="ds-v2 app">
+            <header className="ph">
+                <div className="ph-top">
+                    <div className="ph-title">
+                        <h1>electronica negotiation</h1>
+                        <p className="desc">
+                            Where this project's spend stands at {FAIR.name}, who to see first, and how far each supplier has to move.
+                        </p>
                     </div>
-                </div>
-                <div className="pickers">
-                    <div className="picker">
-                        <button className="picker-btn" onClick={() => setPickerOpen((o) => !o)}>
-                            <span className="eyebrow">Project</span>
-                            <span className="picker-val">{data?.project.name ?? currentProject?.name ?? 'Choose a project'}</span>
-                            {data?.project.customer && <span className="picker-sub">{data.project.customer}</span>}
-                        </button>
-                        {pickerOpen && (
-                            <div className="picker-pop">
-                                <input className="lumi-input" autoFocus placeholder="Search projects or customers, or paste a project id" value={query} onChange={(e) => setQuery(e.target.value)} />
-                                {projectsError && <p className="error">{projectsError}</p>}
-                                <div className="picker-list">
-                                    {(projects ?? []).map((p) => (
-                                        <button
-                                            key={p.id}
-                                            className={`picker-row${p.id === rfqId ? ' on' : ''}`}
-                                            onClick={() => {
-                                                setPickerOpen(false);
-                                                setSelected(null);
-                                                setScenarioId(null);
-                                                setRfqId(p.id);
-                                            }}
-                                        >
-                                            <span className="picker-row-name">{p.name}</span>
-                                            <span className="picker-row-sub">
-                                                {p.customer || 'No customer'} · {p.scenarios} scenario{p.scenarios === 1 ? '' : 's'} · {ago(p.updated)}
-                                            </span>
-                                        </button>
-                                    ))}
-                                    {projects && !projects.length && <p className="muted">No projects match.</p>}
+                    <div className="ph-right">
+                        <div className="picker">
+                            <span className="label-sm">Project</span>
+                            <button className="btn btn-secondary picker-btn" onClick={() => setPickerOpen((o) => !o)} aria-expanded={pickerOpen}>
+                                <span className="value">
+                                    {data?.project.name ?? currentProject?.name ?? 'Choose a project'}
+                                    {data?.project.customer ? <span className="text-subtle"> · {data.project.customer}</span> : null}
+                                </span>
+                                <ChevronDown />
+                            </button>
+                            {pickerOpen && (
+                                <div className="picker-pop">
+                                    <input className="input" autoFocus placeholder="Search projects or customers, or paste a project ID" value={query} onChange={(e) => setQuery(e.target.value)} />
+                                    {projectsError && <p className="error text-body-sm">{projectsError}</p>}
+                                    <div className="picker-list">
+                                        {(projects ?? []).map((p) => (
+                                            <button
+                                                key={p.id}
+                                                className={`picker-row${p.id === rfqId ? ' on' : ''}`}
+                                                onClick={() => {
+                                                    setPickerOpen(false);
+                                                    setSelected(null);
+                                                    setScenarioId(null);
+                                                    setRfqId(p.id);
+                                                }}
+                                            >
+                                                <span className="picker-row-name">{p.name}</span>
+                                                <span className="picker-row-sub">
+                                                    {p.customer || 'No customer'} · {p.scenarios} scenario{p.scenarios === 1 ? '' : 's'} · {ago(p.updated)}
+                                                </span>
+                                            </button>
+                                        ))}
+                                        {projects && !projects.length && <p className="text-body-sm text-muted">No projects match.</p>}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
+                        </div>
+                        {data && data.scenarios.length > 0 && (
+                            <label className="picker">
+                                <span className="label-sm">Sourcing scenario</span>
+                                <select
+                                    className="input"
+                                    value={scenarioId ?? ''}
+                                    onChange={(e) => {
+                                        setSelected(null);
+                                        setScenarioId(e.target.value);
+                                    }}
+                                >
+                                    {data.scenarios.map((s) => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
                         )}
+                        <button className="btn btn-ink" onClick={makePlan} disabled={plan.loading || !data || !onFloor.length} aria-busy={plan.loading}>
+                            <Sparkles style={{ color: 'var(--highlight)' }} />
+                            {plan.loading ? 'Planning your route' : plan.data ? 'Plan again' : 'Plan my route'}
+                        </button>
                     </div>
-                    {data && data.scenarios.length > 0 && (
-                        <label className="picker scenario">
-                            <span className="eyebrow">Sourcing scenario</span>
-                            <select
-                                value={scenarioId ?? ''}
-                                onChange={(e) => {
-                                    setSelected(null);
-                                    setScenarioId(e.target.value);
-                                }}
-                            >
-                                {data.scenarios.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                        {s.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                    )}
                 </div>
             </header>
 
-            {error && <div className="banner error">{error}</div>}
+            {error && (
+                <div className="message critical" role="alert">
+                    <CircleAlert />
+                    <div className="content">
+                        <span className="text">{error}</span>
+                    </div>
+                </div>
+            )}
 
             <FloorPlan suppliers={spend.suppliers} halls={halls} total={spend.total} selected={selected} onSelect={setSelected} route={routeStops} loading={loading} />
 
@@ -371,20 +388,26 @@ export function App() {
                 />
             ) : (
                 <div className="below">
-                    <section className="card plan">
+                    <section className="card pad plan">
                         <div className="card-head">
-                            <div>
-                                <h3>Battle plan</h3>
-                                <p className="muted">
-                                    {plan.data?.headline ??
-                                        'An AI-ranked walking route with one battle card per stand: what to walk away with, why it matters, and the ask.'}
+                            <div className="left">
+                                <div className="subhead">
+                                    <h3>Battle plan</h3>
+                                </div>
+                                <p className="text-body-md">
+                                    {plan.data?.headline ?? 'An AI-ranked walking route with one battle card per stand: what to walk away with, why it matters, and the ask.'}
                                 </p>
                             </div>
-                            <button className="lumi-btn" onClick={makePlan} disabled={plan.loading || !data || !onFloor.length}>
-                                {plan.loading ? 'Planning your route…' : plan.data ? 'Re-plan' : compDone ? 'Plan my route' : `Plan my route (scan ${Math.round((compProgress.done / Math.max(1, compProgress.total)) * 100)}%)`}
-                            </button>
+                            {plan.data && <span className="text-body-sm text-subtle">{plan.data.route.reduce((m, r) => m + (r.minutes || 0), 0)} min on the floor</span>}
                         </div>
-                        {plan.error && <p className="error">{plan.error}</p>}
+                        {plan.error && (
+                            <div className="message critical" role="alert">
+                                <CircleAlert />
+                                <div className="content">
+                                    <span className="text">{plan.error}</span>
+                                </div>
+                            </div>
+                        )}
                         {plan.loading && (
                             <div className="cards">
                                 {[0, 1, 2].map((i) => (
@@ -411,7 +434,7 @@ export function App() {
                                                 <div className="battle-obj">{r.objective}</div>
                                                 <div className="battle-why">{r.why}</div>
                                                 <div className="battle-ask">
-                                                    <span>Ask</span>
+                                                    <span>The ask</span>
                                                     {r.ask}
                                                 </div>
                                                 <div className="battle-stats">
@@ -435,7 +458,10 @@ export function App() {
                                 </div>
                                 {plan.data.remote.length > 0 && (
                                     <div className="remote">
-                                        <div className="eyebrow">Off the floor</div>
+                                        <div className="subhead">
+                                            <h3>Off the floor</h3>
+                                            <span className="meta">{plan.data.remote.length}</span>
+                                        </div>
                                         {plan.data.remote.map((r) => (
                                             <div key={r.supplier} className="remote-row">
                                                 <b>{r.supplier}</b> {r.action}
@@ -446,38 +472,39 @@ export function App() {
                             </>
                         )}
                         {!plan.data && !plan.loading && (
-                            <div className="plan-empty">
-                                <div className="steps">
-                                    <div>
-                                        <b>1</b> Spend by stand from the selected offers
-                                    </div>
-                                    <div>
-                                        <b>2</b> Competing offers on every line ({compProgress.done}/{compProgress.total})
-                                    </div>
-                                    <div>
-                                        <b>3</b> Spend across your last {portfolioProgress.total || 60} projects ({portfolioProgress.done}/{portfolioProgress.total || '…'})
-                                    </div>
-                                    <div>
-                                        <b>4</b> The AI ranks the stands and orders the walk
-                                    </div>
+                            <div className="steps-grid text-body-md">
+                                <div className={data ? 'done' : ''}>
+                                    <b>1</b> Spend by stand from the selected offers
+                                </div>
+                                <div className={compDone ? 'done' : ''}>
+                                    <b>2</b> Competing offers on every line ({compProgress.done}/{compProgress.total})
+                                </div>
+                                <div className={portfolioProgress.total > 0 && portfolioProgress.done >= portfolioProgress.total ? 'done' : ''}>
+                                    <b>3</b> Selected spend across the last {portfolioProgress.total || 60} active projects ({portfolioProgress.done}/{portfolioProgress.total || '…'})
+                                </div>
+                                <div>
+                                    <b>4</b> Plan my route: the AI ranks the stands and orders the walk
                                 </div>
                             </div>
                         )}
                     </section>
 
                     <aside className="side">
-                        <section className="card">
-                            <h3>Spend by hall</h3>
+                        <section className="card pad group">
+                            <div className="subhead">
+                                <h3>Spend by hall</h3>
+                                <span className="meta">{halls.length} halls</span>
+                            </div>
                             {halls.length ? (
                                 <div className="halls">
                                     {halls.map((h) => (
                                         <div key={h.hall} className="hall-row">
                                             <span className="hall-chip">{h.hall}</span>
                                             <div className="hall-info">
-                                                <div className="hall-bar">
+                                                <div className="bar">
                                                     <span style={{ width: `${(h.spend / (halls[0]?.spend || 1)) * 100}%` }} />
                                                 </div>
-                                                <div className="muted small">
+                                                <div className="text-body-sm text-muted">
                                                     {hallById(h.hall)?.topic} · {h.suppliers.map((s) => s.supplier).join(', ')}
                                                 </div>
                                             </div>
@@ -486,11 +513,14 @@ export function App() {
                                     ))}
                                 </div>
                             ) : (
-                                <p className="muted">{loading ? 'Loading…' : 'None of the selected suppliers has a known stand.'}</p>
+                                <p className="text-body-md text-muted">{loading ? 'Loading…' : 'None of the selected suppliers has a known stand.'}</p>
                             )}
                         </section>
-                        <section className="card">
-                            <h3>Suppliers in this project</h3>
+                        <section className="card pad group">
+                            <div className="subhead">
+                                <h3>Suppliers in this project</h3>
+                                <span className="meta">{spend.suppliers.length}</span>
+                            </div>
                             <div className="sup-list">
                                 {spend.suppliers.map((s) => {
                                     const pf = portfolio.get(key(s.supplier));
@@ -502,7 +532,7 @@ export function App() {
                                                     {s.supplier}
                                                     <em>{s.booth ? `${s.booth.hall}.${s.booth.stand}` : 'not at the fair'}</em>
                                                 </span>
-                                                <span className="sup-row-bar">
+                                                <span className="bar">
                                                     <span style={{ width: `${(s.spend / maxSup) * 100}%` }} />
                                                 </span>
                                             </span>
@@ -513,9 +543,9 @@ export function App() {
                                         </button>
                                     );
                                 })}
-                                {!spend.suppliers.length && !loading && <p className="muted">No offers are selected in this scenario yet.</p>}
+                                {!spend.suppliers.length && !loading && <p className="text-body-md text-muted">No offers are selected in this scenario yet.</p>}
                             </div>
-                            {spend.unsourced > 0 && <p className="muted small">{spend.unsourced} lines have no selected offer.</p>}
+                            {spend.unsourced > 0 && <p className="text-body-sm text-subtle">{spend.unsourced} lines have no selected offer.</p>}
                         </section>
                     </aside>
                 </div>

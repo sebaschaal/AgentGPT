@@ -233,12 +233,22 @@ export function bestStart(a: SupplierAnalysis): { mode: Mode; d: number } {
 }
 
 // Across the board: the move that maximises their net revenue change.
-// Targeted: net only grows with the discount, so pick the knee, the move that wins the most volume per point of discount.
+// Targeted: net only grows with the discount, so mark the biggest jump: the move (up to 20%) that wins the most new volume
+// compared with a move 2.5 points smaller. That is the price point worth putting on the table.
 export function sweetSpot(points: SimPoint[], mode: Mode = 'across'): SimPoint {
     if (mode === 'targeted') {
-        const cands = points.filter((p) => p.d >= 0.01 && p.d <= 0.2 && p.gained > 0);
-        if (!cands.length) return points[0];
-        return cands.reduce((best, p) => (p.gained / p.d > best.gained / best.d + 1e-6 ? p : best), cands[0]);
+        const byD = (d: number) => points.reduce((a, p) => (Math.abs(p.d - d) < Math.abs(a.d - d) ? p : a), points[0]);
+        let best = points[0];
+        let bestJump = 0;
+        for (const p of points) {
+            if (p.d < 0.01 || p.d > 0.2) continue;
+            const jump = p.gained - byD(Math.max(0, p.d - 0.025)).gained;
+            if (jump > bestJump * 1.05) {
+                best = p;
+                bestJump = jump;
+            }
+        }
+        return best;
     }
     return points.reduce((best, p) => (p.net > best.net + 1e-6 ? p : best), points[0]);
 }

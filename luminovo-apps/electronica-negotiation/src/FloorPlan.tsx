@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarClock, Map as MapIcon, LayoutGrid, Play } from 'lucide-react';
 import { ENTRANCES, FAIR, HALLS, boothPoint, hallById } from './fair';
 import { money, initials } from './format';
 import type { HallSpend, SupplierSpend } from './model';
@@ -242,16 +243,24 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
                 )}
             </div>
             <div className="hud hud-tr">
-                {daysToFair > 0 && <span className="countdown">Doors open in {daysToFair} day{daysToFair === 1 ? '' : 's'}</span>}
+                {daysToFair > 0 && (
+                    <span className="badge">
+                        <CalendarClock size={12} />
+                        Doors open in {daysToFair} day{daysToFair === 1 ? '' : 's'}
+                    </span>
+                )}
                 <div className="cam-buttons">
                     <button className={view === 'overview' ? 'on' : ''} onClick={() => (stopTour(), onSelect(null), setCam(OVERVIEW), setView('overview'))}>
+                        <MapIcon />
                         Overview
                     </button>
                     <button className={view === 'top' ? 'on' : ''} onClick={() => (stopTour(), setCam(TOP), setView('top'))}>
+                        <LayoutGrid />
                         Hall plan
                     </button>
                     <button className={view === 'tour' ? 'on' : ''} disabled={!route?.length} onClick={() => (onSelect(null), playTour())}>
-                        ▶ Walk the route
+                        <Play />
+                        Walk the route
                     </button>
                 </div>
             </div>

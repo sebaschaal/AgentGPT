@@ -11,7 +11,7 @@ interface ConcessionProps {
     sweetLabel: string;
 }
 
-const W = 680;
+const W = 860;
 const H = 300;
 const PAD = { l: 64, r: 18, t: 22, b: 34 };
 
@@ -60,18 +60,10 @@ export function ConcessionChart({ points, d, onChange, sweet, max, sweetLabel }:
             <path d={area((p) => p.gained)} className="area-gained" />
             {down > 0 && <path d={area((p) => -p.giveBack)} className="area-give" />}
             <path d={line((p) => p.net)} className="line-net" />
-            <text x={PAD.l + 8} y={PAD.t + 4} className="label-up">
-                Volume they win ↑
-            </text>
-            {down > 0 && (
-                <text x={PAD.l + 8} y={H - PAD.b - 8} className="label-down">
-                    Given back on lines they hold ↓
-                </text>
-            )}
             {sweet.d > 0 && (
                 <g>
                     <line x1={x(sweet.d)} x2={x(sweet.d)} y1={PAD.t} y2={H - PAD.b} className="line-sweet" />
-                    <text x={x(sweet.d) + (x(sweet.d) > W - 180 ? -6 : 6)} y={PAD.t + 18} className="label-sweet" textAnchor={x(sweet.d) > W - 180 ? 'end' : 'start'}>
+                    <text x={x(sweet.d) + (x(sweet.d) > W - 180 ? -6 : 6)} y={PAD.t + 6} className="label-sweet" textAnchor={x(sweet.d) > W - 180 ? 'end' : 'start'}>
                         {sweetLabel} −{pct(sweet.d, 1)}
                     </text>
                 </g>

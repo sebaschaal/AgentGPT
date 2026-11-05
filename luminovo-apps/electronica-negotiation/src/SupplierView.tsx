@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOpenExternal, useNotify } from '@luminovo/widget-sdk';
+import { Copy, MessageSquareQuote, Newspaper, RefreshCw, Sparkles, X } from 'lucide-react';
 import { call, describeError } from './api';
 import { ConcessionChart, GapBuckets, MoveBar } from './charts';
 import { ago, initials, money, pct, qty, signedPct, unit } from './format';
@@ -190,52 +191,65 @@ export function SupplierView(p: Props) {
         return items.slice(0, 8).map((n, i) => ({ ...n, note: notes.get(i) }));
     }, [p.news]);
 
+    const notQuotedVolume = a.notQuoted.reduce((s, n) => s + n.award, 0);
+    const nearLines = a.contestable.filter((c) => c.move > 0 && c.move <= 0.1).length;
+
     return (
         <section className="supplier">
             <header className="sup-head">
                 <div className="sup-logo">{initials(supplier.supplier)}</div>
                 <div className="sup-title">
-                    <h2>{supplier.supplier}</h2>
                     <div className="sup-meta">
                         {booth ? (
-                            <span className={`chip ${booth.confirmed ? 'chip--green' : 'chip--yellow'}`}>
+                            <span className="badge">
+                                <span className={`dot ${booth.confirmed ? 'dot-good' : 'dot-warning'}`} />
                                 Hall {booth.hall} · Stand {booth.stand}
                                 {booth.confirmed ? '' : ' · earlier edition'}
                             </span>
                         ) : (
-                            <span className="chip chip--neutral">No stand found, plan a call</span>
+                            <span className="badge">
+                                <span className="dot dot-neutral" />
+                                No stand found, plan a call
+                            </span>
                         )}
-                        {booth?.note && <span className="sup-note">{booth.note}</span>}
                         {p.stop && (
-                            <span className="chip chip--primary">
+                            <span className="badge badge-outline brand">
                                 Stop {p.stop.index + 1} on your route · {p.stop.minutes ?? 20} min
                             </span>
                         )}
+                        {booth?.note && <span className="text-body-sm text-subtle">{booth.note}</span>}
                     </div>
+                    <h2>{supplier.supplier}</h2>
                 </div>
-                <button className="lumi-btn lumi-btn--ghost close" onClick={p.onClose} aria-label="Back to the floor plan">
-                    ✕
+                <button className="btn btn-ghost btn-icon" onClick={p.onClose} aria-label="Back to the floor plan" title="Back to the floor plan">
+                    <X />
                 </button>
             </header>
 
-            <div className="kpis">
-                <Kpi label="Spend in this project" value={money(supplier.spend)} sub={`${pct(supplier.share, 1)} of the project · ${supplier.lines} lines`} />
-                <Kpi
-                    label="Selected spend, all projects"
-                    value={p.portfolio ? money(p.portfolio.spend) : '…'}
-                    sub={
-                        p.portfolio
-                            ? `${p.portfolio.projects} projects · ${p.portfolio.lines} lines${p.portfolioProgress.done < p.portfolioProgress.total ? ' · still counting' : ''}`
-                            : `Counting ${p.portfolioProgress.done}/${p.portfolioProgress.total} projects`
-                    }
-                />
-                <Kpi label="Up for grabs within 10%" value={money(within10)} sub={`${a.contestable.filter((c) => c.move > 0 && c.move <= 0.1).length} lines they almost win`} tone="primary" />
-                <Kpi label="Price-match asks" value={money(a.matchSavings)} sub={`${a.matchAsks.length} held lines where a competitor is cheaper`} tone={a.matchSavings > 0 ? 'green' : undefined} />
-                <Kpi label="Not quoted" value={money(a.notQuoted.reduce((s, n) => s + n.award, 0))} sub={`${a.notQuoted.length} lines to ask them to quote`} />
+            <div className="card">
+                <div className="kpis">
+                    <Kpi label="Spend in this project" value={money(supplier.spend)} sub={`${pct(supplier.share, 1)} of the project · ${supplier.lines} lines`} />
+                    <Kpi
+                        label="Selected spend, all projects"
+                        value={p.portfolio ? money(p.portfolio.spend) : '…'}
+                        sub={
+                            p.portfolio
+                                ? `${p.portfolio.projects} projects · ${p.portfolio.lines} lines${p.portfolioProgress.done < p.portfolioProgress.total ? ' · still counting' : ''}`
+                                : `Counting ${p.portfolioProgress.done}/${p.portfolioProgress.total} projects`
+                        }
+                        loading={!p.portfolio}
+                    />
+                    <Kpi label="Up for grabs within 10%" value={money(within10)} sub={`${nearLines} line${nearLines === 1 ? '' : 's'} they almost win`} />
+                    <Kpi label="Price-match asks" value={money(a.matchSavings)} sub={`${a.matchAsks.length} held lines where a competitor is cheaper`} />
+                    <Kpi label="Not quoted" value={money(notQuotedVolume)} sub={`${a.notQuoted.length} lines to ask them to quote`} />
+                </div>
             </div>
 
             <div className="ticker" aria-live="polite">
-                <span className="ticker-tag">{p.news?.loading ? 'Reading the news…' : p.news?.via ? `Live · ${p.news.via}` : 'News'}</span>
+                <span className="ticker-tag">
+                    <Newspaper />
+                    {p.news?.loading ? 'Reading the news' : p.news?.via ? `Live from ${p.news.via}` : 'News'}
+                </span>
                 <div className="ticker-track">
                     {ticker.length ? (
                         <div className="ticker-move" style={{ animationDuration: `${Math.max(30, ticker.length * 9)}s` }}>
@@ -243,7 +257,7 @@ export function SupplierView(p: Props) {
                                 <button key={i} className="ticker-item" onClick={() => t.url && openExternal(t.url)}>
                                     <i className={`tone tone--${t.note?.tone ?? 'neutral'}`} />
                                     <b>{t.source || 'News'}</b> {t.title}
-                                    {t.note && <em> — {t.note.takeaway}</em>}
+                                    {t.note && <em> · {t.note.takeaway}</em>}
                                     <span className="ticker-date">{ago(t.date)}</span>
                                 </button>
                             ))}
@@ -254,87 +268,97 @@ export function SupplierView(p: Props) {
                 </div>
             </div>
 
-            <nav className="tabs">
-                <button className={tab === 'negotiate' ? 'on' : ''} onClick={() => setTab('negotiate')}>
-                    Negotiation
-                </button>
-                <button className={tab === 'talk' ? 'on' : ''} onClick={() => setTab('talk')}>
-                    Conversation opener
-                </button>
-                <button className={tab === 'lines' ? 'on' : ''} onClick={() => setTab('lines')}>
-                    Line items <span className="count">{a.held.length + a.contestable.length + a.notQuoted.length}</span>
-                </button>
+            <div className="tabs-row">
+                <div className="tabs tabs-line" role="tablist">
+                    <button className="tab" role="tab" aria-selected={tab === 'negotiate'} onClick={() => setTab('negotiate')}>
+                        Negotiation
+                    </button>
+                    <button className="tab" role="tab" aria-selected={tab === 'talk'} onClick={() => setTab('talk')}>
+                        Conversation opener
+                    </button>
+                    <button className="tab" role="tab" aria-selected={tab === 'lines'} onClick={() => setTab('lines')}>
+                        Line items <span className="count">{a.held.length + a.contestable.length + a.notQuoted.length}</span>
+                    </button>
+                </div>
                 {scanning && (
                     <span className="scan">
-                        <span className="scan-bar">
+                        <span className="bar">
                             <span style={{ width: `${(p.compProgress.done / Math.max(1, p.compProgress.total)) * 100}%` }} />
                         </span>
                         Scanning competing offers {p.compProgress.done}/{p.compProgress.total} lines
                     </span>
                 )}
-            </nav>
+            </div>
 
             {tab === 'talk' && (
                 <div className="talk">
-                    <div className="opener-card">
-                        <div className="eyebrow">Open with</div>
-                        {p.news?.loading && <p className="muted">Writing an opener from today's headlines…</p>}
-                        {p.news?.error && <p className="error">{p.news.error}</p>}
+                    <div className="card pad group opener-card">
+                        <div className="subhead">
+                            <h3>Open with</h3>
+                            <button className="btn btn-secondary btn-sm" onClick={p.loadNews} disabled={p.news?.loading}>
+                                <RefreshCw />
+                                Refresh
+                            </button>
+                        </div>
+                        {p.news?.loading && <div className="shimmer" />}
+                        {p.news?.error && <p className="error text-body-md">{p.news.error}</p>}
                         {p.news?.summary?.opener && <blockquote>{p.news.summary.opener}</blockquote>}
                         {p.news?.summary?.hook && (
-                            <p className="hook">
+                            <p className="text-body-md">
                                 <b>Bridge to business:</b> {p.news.summary.hook}
                             </p>
                         )}
-                        {p.news?.summary?.error && <p className="error">{p.news.summary.hint ?? 'The AI summary is unavailable right now.'}</p>}
-                        <div className="opener-facts">
-                            <span>
-                                You buy <b>{money(supplier.spend)}</b> from them on this project
-                                {p.portfolio ? (
-                                    <>
-                                        {' '}
-                                        and <b>{money(p.portfolio.spend)}</b> across {p.portfolio.projects} projects
-                                    </>
-                                ) : null}
-                                .
-                            </span>
-                        </div>
-                        <button className="lumi-btn lumi-btn--secondary" onClick={p.loadNews} disabled={p.news?.loading}>
-                            Refresh news
-                        </button>
+                        {p.news?.summary?.error && <p className="error text-body-md">{p.news.summary.hint ?? 'The AI summary is unavailable right now.'}</p>}
+                        <p className="text-body-md text-muted">
+                            You buy <b>{money(supplier.spend)}</b> from them on this project
+                            {p.portfolio ? (
+                                <>
+                                    {' '}
+                                    and <b>{money(p.portfolio.spend)}</b> across {p.portfolio.projects} projects
+                                </>
+                            ) : null}
+                            .
+                        </p>
                     </div>
-                    <div className="news-list">
-                        <div className="eyebrow">Headlines</div>
-                        {(p.news?.items ?? []).slice(0, 8).map((n, i) => (
-                            <button key={i} className="news-item" onClick={() => n.url && openExternal(n.url)}>
-                                <span className="news-src">
-                                    {n.source} · {ago(n.date)}
-                                </span>
-                                <span className="news-title">{n.title}</span>
-                                {n.snippet && <span className="news-snip">{n.snippet}</span>}
-                            </button>
-                        ))}
-                        {!p.news?.loading && !(p.news?.items ?? []).length && <p className="muted">No recent headlines found for {supplier.supplier}.</p>}
+                    <div className="card pad">
+                        <div className="subhead">
+                            <h3>Headlines</h3>
+                            <span className="meta">{p.news?.via ?? ''}</span>
+                        </div>
+                        <div className="news-list">
+                            {(p.news?.items ?? []).slice(0, 8).map((n, i) => (
+                                <button key={i} className="news-item" onClick={() => n.url && openExternal(n.url)}>
+                                    <span className="news-src">
+                                        {n.source} · {ago(n.date)}
+                                    </span>
+                                    <span className="news-title">{n.title}</span>
+                                    {n.snippet && <span>{n.snippet}</span>}
+                                </button>
+                            ))}
+                            {!p.news?.loading && !(p.news?.items ?? []).length && <p className="text-body-md text-muted">No recent headlines found for {supplier.supplier}.</p>}
+                        </div>
                     </div>
                 </div>
             )}
 
             {tab === 'negotiate' && (
                 <div className="negotiate">
-                    <div className="card sim">
+                    <div className="card pad sim">
                         <div className="card-head">
-                            <div>
-                                <h3>How far do they need to move?</h3>
-                                <p className="muted">
-                                    Award volume if {supplier.supplier} cuts prices by the amount on the axis and we award every line where they become cheapest.
+                            <div className="left">
+                                <div className="subhead">
+                                    <h3>How far do they need to move?</h3>
+                                </div>
+                                <p className="text-body-md text-muted">
+                                    What {supplier.supplier} wins and gives back if they cut prices by the amount on the axis, assuming we award every line where they become cheapest.
                                 </p>
                             </div>
-                            <div className="seg">
-                                <button className={mode === 'across' ? 'on' : ''} onClick={() => (setTouched(true), setMode('across'))}>
-                                    Across the board
+                            <div className="segmented" role="group" aria-label="Where the price move applies">
+                                <button aria-pressed={mode === 'across'} onClick={() => (setTouched(true), setMode('across'))}>
+                                    All lines
                                 </button>
-                                <button className={mode === 'targeted' ? 'on' : ''} onClick={() => (setTouched(true), setMode('targeted'))}>
-                                    Only on lines they don't hold
+                                <button aria-pressed={mode === 'targeted'} onClick={() => (setTouched(true), setMode('targeted'))}>
+                                    Lines they don't hold
                                 </button>
                             </div>
                         </div>
@@ -358,77 +382,91 @@ export function SupplierView(p: Props) {
                                         Net change for them
                                     </span>
                                 </div>
-                                <ConcessionChart points={points} d={d} onChange={moveTo} sweet={sweet} max={0.3} sweetLabel={mode === 'across' ? 'Best net for them' : 'Most volume per point'} />
+                                <ConcessionChart points={points} d={d} onChange={moveTo} sweet={sweet} max={0.3} sweetLabel={mode === 'across' ? 'Best net for them' : 'Biggest jump'} />
                                 <input className="slider" type="range" min={0} max={0.3} step={0.0025} value={d} onChange={(e) => moveTo(Number(e.target.value))} aria-label="Price move" />
                                 <div className="checkpoints">
-                                    {checkpoints.map(({ c, p: cp }) => (
-                                        <button key={c} className={`checkpoint${Math.abs(c - d) < 0.001 ? ' on' : ''}`} onClick={() => moveTo(c)}>
-                                            <b>−{pct(c)}</b>
-                                            <em>
-                                                <span className={cp.volume >= a.heldVolume ? 'up' : 'down'}>{signedPct(a.heldVolume ? cp.volume / a.heldVolume - 1 : 0, 0)} volume</span> · +{cp.wonLines} lines
-                                            </em>
-                                        </button>
-                                    ))}
+                                    {checkpoints.map(({ c, p: cp }) => {
+                                        const up = a.heldVolume ? cp.volume / a.heldVolume - 1 : 0;
+                                        return (
+                                            <button key={c} className={`checkpoint${Math.abs(c - d) < 0.001 ? ' on' : ''}`} onClick={() => moveTo(c)}>
+                                                <b>−{pct(c)}</b>
+                                                <span>
+                                                    <span className={up >= 0 ? 'sig-good' : 'sig-crit'}>
+                                                        {up >= 0 ? '↑' : '↓'} {signedPct(up, 0).replace(/^[+−]/, '')}
+                                                    </span>{' '}
+                                                    volume · +{cp.wonLines} lines
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                                 <div className="readout">
-                                    <div className="readout-big">
-                                        <span className="muted">Price move</span>
-                                        <b>−{pct(d, 1)}</b>
-                                    </div>
-                                    <div className="readout-big">
-                                        <span className="muted">Award volume</span>
-                                        <b>
-                                            {money(a.heldVolume)} → {money(sim.volume)}
-                                        </b>
-                                        <em className={volumeUp >= 0 ? 'up' : 'down'}>{signedPct(volumeUp)}</em>
-                                    </div>
-                                    <div className="readout-big">
-                                        <span className="muted">Lines</span>
-                                        <b>
-                                            {a.held.length} → {sim.lines}
-                                        </b>
-                                        <em className="up">+{sim.wonLines} won</em>
-                                    </div>
-                                    <div className="readout-big">
-                                        <span className="muted">They win / give back</span>
-                                        <b>
-                                            <span className="up">+{money(sim.gained)}</span> <span className="down">−{money(sim.giveBack)}</span>
-                                        </b>
-                                        <em>{mode === 'across' ? 'give-back on lines they hold' : 'no give-back on held lines'}</em>
-                                    </div>
-                                    <div className="readout-big">
-                                        <span className="muted">Net for them</span>
-                                        <b className={sim.net >= 0 ? 'up' : 'down'}>
-                                            {sim.net >= 0 ? '+' : '−'}
-                                            {money(Math.abs(sim.net))}
-                                        </b>
-                                    </div>
+                                    <Kpi label="Price move" value={`−${pct(d, 1)}`} sub={mode === 'across' ? 'on every line' : 'on lines they don’t hold'} />
+                                    <Kpi
+                                        label="Award volume"
+                                        value={money(sim.volume)}
+                                        subNode={
+                                            <>
+                                                <span className={volumeUp >= 0 ? 'sig-good' : 'sig-crit'}>
+                                                    {volumeUp >= 0 ? '↑' : '↓'} {signedPct(volumeUp).replace(/^[+−]/, '')}
+                                                </span>{' '}
+                                                vs. {money(a.heldVolume)} today
+                                            </>
+                                        }
+                                    />
+                                    <Kpi
+                                        label="Lines"
+                                        value={`${sim.lines}`}
+                                        subNode={
+                                            <>
+                                                <span className="sig-good">↑ {sim.wonLines}</span> vs. {a.held.length} today
+                                            </>
+                                        }
+                                    />
+                                    <Kpi label="They give back" value={money(sim.giveBack)} sub={mode === 'across' ? 'on the lines they hold' : 'nothing on held lines'} />
+                                    <Kpi
+                                        label="Net change for them"
+                                        value={`${sim.net >= 0 ? '+' : '−'}${money(Math.abs(sim.net))}`}
+                                        subNode={<span className={sim.net >= 0 ? 'sig-good' : 'sig-crit'}>{sim.net >= 0 ? 'they come out ahead' : 'they lose revenue'}</span>}
+                                    />
                                 </div>
-                                <p className="sim-say">
-                                    {sim.wonLines > 0 && sim.net > 0 ? (
-                                        <>
-                                            Say it like this: “Move <b>{pct(d, 1)}</b>
-                                            {mode === 'across' ? ' across the board' : ' on the lines you don’t have yet'} and you win <b>{sim.wonLines} more line{sim.wonLines === 1 ? '' : 's'}</b>. Your volume with us goes from <b>{money(a.heldVolume)}</b> to <b>{money(sim.volume)}</b> ({signedPct(volumeUp, 0)}).”
-                                        </>
-                                    ) : sweet.d > 0 && sweet.net > 0 ? (
-                                        <>
-                                            At this move they don’t gain. Their best point is <b>−{pct(sweet.d, 1)}</b>: {sweet.wonLines} more lines and {money(sweet.volume)} award volume.{' '}
-                                            <button className="linkish" onClick={() => moveTo(sweet.d)}>
-                                                Jump there
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>No price move wins them net volume on this project. Use the price-match asks and the lines they have not quoted instead.</>
+                                <div className="message sim-say" role="note">
+                                    <MessageSquareQuote />
+                                    <div className="content">
+                                        <span className="text">
+                                            {sim.wonLines > 0 && sim.net > 0 ? (
+                                                <>
+                                                    Say it like this: “Move <b>{pct(d, 1)}</b>
+                                                    {mode === 'across' ? ' across the board' : ' on the lines you don’t have yet'} and you win <b>{sim.wonLines} more line{sim.wonLines === 1 ? '' : 's'}</b>. Your volume with us goes from <b>{money(a.heldVolume)}</b> to <b>{money(sim.volume)}</b>.”
+                                                </>
+                                            ) : sweet.d > 0 && sweet.net > 0 ? (
+                                                <>
+                                                    At this move they don’t gain. Their best point is <b>−{pct(sweet.d, 1)}</b>: {sweet.wonLines} more lines and {money(sweet.volume)} award volume.
+                                                </>
+                                            ) : (
+                                                <>No price move wins them net volume on this project. Use the price-match asks and the lines they have not quoted instead.</>
+                                            )}
+                                        </span>
+                                    </div>
+                                    {sim.net <= 0 && sweet.d > 0 && sweet.net > 0 && (
+                                        <button className="btn btn-ghost btn-sm inline-action" onClick={() => moveTo(sweet.d)}>
+                                            Jump to −{pct(sweet.d, 1)}
+                                        </button>
                                     )}
-                                </p>
+                                </div>
                             </>
                         )}
                     </div>
 
                     <div className="side-stack">
-                        <div className="card">
-                            <h3>Where they are close</h3>
-                            <p className="muted">Lines they quoted but lost, by the price cut that would win them. Click a bar to see the lines.</p>
+                        <div className="card pad">
+                            <div className="subhead">
+                                <h3>Where they are close</h3>
+                                <span className="meta">{a.contestable.length} lost lines</span>
+                            </div>
+                            <p className="text-body-sm text-muted" style={{ margin: '4px 0 12px' }}>
+                                Lines they quoted but lost, by the price cut that would win them. Click a row to see the lines.
+                            </p>
                             <GapBuckets
                                 buckets={bks}
                                 active={bucket}
@@ -439,7 +477,9 @@ export function SupplierView(p: Props) {
                             />
                             {blockers.length > 0 && (
                                 <div className="blockers">
-                                    <div className="eyebrow">Cheapest but not awarded, because of</div>
+                                    <div className="subhead">
+                                        <h3>Cheapest, yet not awarded</h3>
+                                    </div>
                                     {blockers.map((b) => (
                                         <div key={b.reason} className="blocker">
                                             <span>{b.reason}</span>
@@ -449,93 +489,124 @@ export function SupplierView(p: Props) {
                                             </em>
                                         </div>
                                     ))}
-                                    <p className="small muted">Fix these and they win on price alone: ask for stock, a shorter lead time or the approval paperwork.</p>
+                                    <p className="text-body-sm text-muted" style={{ margin: 0 }}>
+                                        Fix these and they win on price alone: ask for stock, a shorter lead time or the approval paperwork.
+                                    </p>
                                 </div>
                             )}
                         </div>
-                        <div className="card">
-                            <h3>Ask them to match</h3>
-                            <p className="muted">They hold these lines, yet a competitor is cheaper.</p>
+                        <div className="card pad">
+                            <div className="subhead">
+                                <h3>Ask them to match</h3>
+                                <span className="meta">{money(a.matchSavings)}</span>
+                            </div>
+                            <p className="text-body-sm text-muted" style={{ margin: '4px 0 8px' }}>
+                                They hold these lines, yet a competitor is cheaper.
+                            </p>
                             {a.matchAsks.length ? (
                                 <ul className="asks">
                                     {a.matchAsks.slice(0, 5).map((h) => (
                                         <li key={h.line.id}>
                                             <span className="mpn">{h.line.mpn}</span>
-                                            <span>
-                                                {h.alt!.supplier} is {pct(-h.cushion!, 1)} lower{h.altApproved ? '' : ' (not approved)'}
+                                            <span className="why">
+                                                {h.alt!.supplier} is {pct(-h.cushion!, 1)} lower{h.altApproved ? '' : ', not approved'}
                                             </span>
-                                            <b className="up">save {money(h.award - h.alt!.total)}</b>
+                                            <b>save {money(h.award - h.alt!.total)}</b>
                                         </li>
                                     ))}
                                 </ul>
                             ) : (
-                                <p className="muted small">{scanning ? 'Still scanning…' : 'They are the cheapest on every line they hold.'}</p>
+                                <p className="text-body-md text-muted">{scanning ? 'Still scanning…' : 'They are the cheapest on every line they hold.'}</p>
                             )}
                             {a.defend.length > 0 && (
-                                <p className="small">
+                                <p className="text-body-sm" style={{ margin: '8px 0 0' }}>
                                     <b>{a.defend.length}</b> held line{a.defend.length === 1 ? '' : 's'} where the next offer is less than 5% behind ({money(a.defend.reduce((s, h) => s + h.award, 0))}). They know they can lose these.
                                 </p>
                             )}
                         </div>
                     </div>
 
-                    <div className="card brief">
+                    <div className="card pad brief">
                         <div className="card-head">
-                            <div>
-                                <h3>Negotiation brief</h3>
-                                <p className="muted">Goals, asks with numbers, leverage, what to give and a walk-away, built from the data above.</p>
+                            <div className="left">
+                                <div className="subhead">
+                                    <h3>Negotiation brief</h3>
+                                </div>
+                                <p className="text-body-md text-muted">Goals, asks with numbers, leverage, what to give and a walk-away, written from the data above.</p>
                             </div>
-                            <div className="row">
+                            <div className="row-actions">
                                 {brief.data && (
-                                    <button className="lumi-btn lumi-btn--secondary" onClick={copyBrief}>
+                                    <button className="btn btn-secondary" onClick={copyBrief}>
+                                        <Copy />
                                         Copy
                                     </button>
                                 )}
-                                <button className="lumi-btn" onClick={makeBrief} disabled={brief.loading || scanning}>
-                                    {brief.loading ? 'Writing…' : brief.data ? 'Rewrite' : scanning ? 'Waiting for scan…' : 'Write the brief'}
+                                <button className="btn btn-ink" onClick={makeBrief} disabled={brief.loading || scanning} aria-busy={brief.loading}>
+                                    <Sparkles style={{ color: 'var(--highlight)' }} />
+                                    {brief.loading ? 'Writing' : brief.data ? 'Write again' : scanning ? 'Waiting for the scan' : 'Write the brief'}
                                 </button>
                             </div>
                         </div>
-                        {brief.error && <p className="error">{brief.error}</p>}
+                        {brief.error && <p className="error text-body-md">{brief.error}</p>}
                         {brief.loading && <div className="shimmer" />}
                         {brief.data && (
                             <div className="brief-body">
                                 <p className="stance">{brief.data.stance}</p>
-                                <div className="brief-grid">
-                                    <div>
-                                        <div className="eyebrow">Goals</div>
-                                        <ul>
-                                            {brief.data.goals.map((g, i) => (
-                                                <li key={i}>{g}</li>
-                                            ))}
-                                        </ul>
-                                        <div className="eyebrow">Leverage</div>
-                                        <ul>
-                                            {brief.data.leverage.map((g, i) => (
-                                                <li key={i}>{g}</li>
-                                            ))}
-                                        </ul>
+                                <div className="brief-grid text-body-md">
+                                    <div className="subsections">
+                                        <div className="subsection">
+                                            <div className="subhead">
+                                                <h3>Goals</h3>
+                                            </div>
+                                            <ul>
+                                                {brief.data.goals.map((g, i) => (
+                                                    <li key={i}>{g}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                        <div className="subsection">
+                                            <div className="subhead">
+                                                <h3>Leverage</h3>
+                                            </div>
+                                            <ul>
+                                                {brief.data.leverage.map((g, i) => (
+                                                    <li key={i}>{g}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <div className="eyebrow">Asks</div>
+                                    <div className="subsection">
+                                        <div className="subhead">
+                                            <h3>Asks</h3>
+                                            <span className="meta">{brief.data.asks.length}</span>
+                                        </div>
                                         {brief.data.asks.map((x, i) => (
                                             <div className="ask" key={i}>
-                                                <div>
-                                                    <b>{x.title}</b> <span className="chip chip--primary">{x.value}</span>
+                                                <div className="top">
+                                                    <b>{x.title}</b>
+                                                    <span className="badge badge-outline brand">{x.value}</span>
                                                 </div>
-                                                <div className="muted">{x.detail}</div>
+                                                <div>{x.detail}</div>
                                             </div>
                                         ))}
                                     </div>
-                                    <div>
-                                        <div className="eyebrow">What we can give</div>
-                                        <ul>
-                                            {brief.data.give.map((g, i) => (
-                                                <li key={i}>{g}</li>
-                                            ))}
-                                        </ul>
-                                        <div className="eyebrow">Walk away</div>
-                                        <p>{brief.data.walkaway}</p>
+                                    <div className="subsections">
+                                        <div className="subsection">
+                                            <div className="subhead">
+                                                <h3>What we can give</h3>
+                                            </div>
+                                            <ul>
+                                                {brief.data.give.map((g, i) => (
+                                                    <li key={i}>{g}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                        <div className="subsection">
+                                            <div className="subhead">
+                                                <h3>Walk away</h3>
+                                            </div>
+                                            <p style={{ margin: 0 }}>{brief.data.walkaway}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -545,98 +616,124 @@ export function SupplierView(p: Props) {
             )}
 
             {tab === 'lines' && (
-                <div className="card lines">
+                <div className="group">
                     <div className="filters">
                         {(
                             [
-                                ['all', 'All'],
-                                ['held', `They hold (${a.held.length})`],
-                                ['contest', `They quoted, lost (${a.contestable.length})`],
-                                ['match', `Competitor cheaper (${a.matchAsks.length})`],
-                                ['none', `Not quoted (${a.notQuoted.length})`],
-                            ] as [LineFilter, string][]
-                        ).map(([id, label]) => (
-                            <button key={id} className={`chip-btn${filter === id && !bucket ? ' on' : ''}`} onClick={() => (setBucket(null), setFilter(id))}>
-                                {label}
+                                ['all', 'All', a.held.length + a.contestable.length + a.notQuoted.length],
+                                ['held', 'They hold', a.held.length],
+                                ['contest', 'They quoted, lost', a.contestable.length],
+                                ['match', 'Competitor cheaper', a.matchAsks.length],
+                                ['none', 'Not quoted', a.notQuoted.length],
+                            ] as [LineFilter, string, number][]
+                        ).map(([id, label, n]) => (
+                            <button key={id} className="fchip" aria-pressed={filter === id && !bucket} onClick={() => (setBucket(null), setFilter(id))}>
+                                {label} <span className="n">{n}</span>
                             </button>
                         ))}
                         {bucket && (
-                            <button className="chip-btn on" onClick={() => setBucket(null)}>
-                                {bks.find((b) => b.id === bucket)?.label} ✕
-                            </button>
+                            <span className="fchip selected has-clear">
+                                <span className="label">{bks.find((b) => b.id === bucket)?.label}</span>
+                                <button className="clear" aria-label="Clear the gap filter" onClick={() => setBucket(null)}>
+                                    <X />
+                                </button>
+                            </span>
                         )}
                     </div>
-                    <table className="lumi-table">
-                        <thead>
-                            <tr>
-                                <th>Part</th>
-                                <th className="num">Qty</th>
-                                <th>Position</th>
-                                <th className="num">Their unit price</th>
-                                <th>Next best / winner</th>
-                                <th className="num">Unit price</th>
-                                <th>Gap</th>
-                                <th className="num">Ask for</th>
-                                <th className="num">Line value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.slice(0, 200).map((r) => (
-                                <tr key={r.id}>
-                                    <td>
-                                        <div className="mpn">{r.line.mpn}</div>
-                                        <div className="muted small">{r.line.manufacturer}</div>
-                                    </td>
-                                    <td className="num">{qty(r.line.qty)}</td>
-                                    <td>
-                                        {r.kind === 'held' && <span className="chip chip--green">Held</span>}
-                                        {r.kind === 'contest' && <span className="chip chip--yellow">Lost to {r.ref}</span>}
-                                        {r.kind === 'none' && <span className="chip chip--neutral">Not quoted</span>}
-                                    </td>
-                                    <td className="num">{r.theirUnit !== null ? unit(r.theirUnit) : '—'}</td>
-                                    <td>
-                                        {r.ref}
-                                        {r.kind === 'held' && r.ref !== '—' && !r.altApproved && <div className="muted small">not approved</div>}
-                                    </td>
-                                    <td className="num">{r.refUnit !== null ? unit(r.refUnit) : '—'}</td>
-                                    <td>
-                                        {r.kind === 'contest' && r.move !== null && <MoveBar move={r.move} />}
-                                        {r.kind === 'contest' && r.blocker && <div className="muted small">{r.blocker}</div>}
-                                        {r.kind === 'held' &&
-                                            (r.cushion === null ? (
-                                                <span className="muted small">no alternative</span>
-                                            ) : r.cushion < -0.001 ? (
-                                                <span className="tag-match">competitor {pct(-r.cushion, 1)} lower</span>
-                                            ) : (
-                                                <span className={`tag-lead${r.cushion < 0.05 ? ' thin' : ''}`}>leads by {pct(r.cushion, 1)}</span>
-                                            ))}
-                                        {r.kind === 'none' && <span className="muted small">ask for a quote</span>}
-                                    </td>
-                                    <td className="num target">
-                                        {r.kind === 'held' && r.cushion !== null && r.cushion < -0.001 && r.refUnit !== null && <span title="Match the cheaper competitor">{unit(r.refUnit)}</span>}
-                                        {r.kind === 'contest' && r.move !== null && r.theirUnit !== null && (
-                                            <span title="Unit price at which they win the line">{r.move <= 0 ? 'award terms' : `≤ ${unit(r.theirUnit * (1 - r.move - 0.005))}`}</span>
-                                        )}
-                                    </td>
-                                    <td className="num">{money(r.award)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {rows.length > 200 && <p className="muted small">Showing the first 200 of {rows.length} lines.</p>}
-                    {!rows.length && <p className="muted">{scanning ? 'Scanning competing offers…' : 'No lines in this view.'}</p>}
+                    <div className="table-card">
+                        <div className="table-scroll">
+                            <table className="table">
+                                <thead>
+                                    <tr>
+                                        <th>Part</th>
+                                        <th className="num">Qty</th>
+                                        <th>Position</th>
+                                        <th className="num">Their unit price</th>
+                                        <th>Next best or winner</th>
+                                        <th className="num">Unit price</th>
+                                        <th>Gap</th>
+                                        <th className="num">Ask for</th>
+                                        <th className="num">Line value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.slice(0, 200).map((r) => (
+                                        <tr key={r.id}>
+                                            <td>
+                                                <div className="text-label-md">{r.line.mpn}</div>
+                                                <div className="text-body-sm text-subtle">{r.line.manufacturer}</div>
+                                            </td>
+                                            <td className="num">{qty(r.line.qty)}</td>
+                                            <td>
+                                                {r.kind === 'held' && (
+                                                    <span className="badge">
+                                                        <span className="dot dot-good" />
+                                                        Held
+                                                    </span>
+                                                )}
+                                                {r.kind === 'contest' && (
+                                                    <span className="badge">
+                                                        <span className="dot dot-warning" />
+                                                        Lost
+                                                    </span>
+                                                )}
+                                                {r.kind === 'none' && (
+                                                    <span className="badge">
+                                                        <span className="dot dot-neutral" />
+                                                        Not quoted
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="num">{r.theirUnit !== null ? unit(r.theirUnit) : '–'}</td>
+                                            <td>
+                                                <span className="entity-link">{r.ref}</span>
+                                                {r.kind === 'held' && r.ref !== '—' && !r.altApproved && <div className="text-body-sm text-subtle">not approved</div>}
+                                            </td>
+                                            <td className="num">{r.refUnit !== null ? unit(r.refUnit) : '–'}</td>
+                                            <td>
+                                                {r.kind === 'contest' && r.move !== null && <MoveBar move={r.move} />}
+                                                {r.kind === 'contest' && r.blocker && <div className="text-body-sm text-subtle">{r.blocker}</div>}
+                                                {r.kind === 'held' &&
+                                                    (r.cushion === null ? (
+                                                        <span className="text-body-sm text-subtle">no alternative</span>
+                                                    ) : r.cushion < -0.001 ? (
+                                                        <span className="text-body-sm">
+                                                            <span className="sig-good">↓ {pct(-r.cushion, 1)}</span> competitor cheaper
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-body-sm">
+                                                            <span className={r.cushion < 0.05 ? 'sig-warn' : 'sig-neutral'}>leads by {pct(r.cushion, 1)}</span>
+                                                        </span>
+                                                    ))}
+                                                {r.kind === 'none' && <span className="text-body-sm text-subtle">ask for a quote</span>}
+                                            </td>
+                                            <td className="num target">
+                                                {r.kind === 'held' && r.cushion !== null && r.cushion < -0.001 && r.refUnit !== null && <span title="Match the cheaper competitor">{unit(r.refUnit)}</span>}
+                                                {r.kind === 'contest' && r.move !== null && r.theirUnit !== null && (
+                                                    <span title="Unit price at which they win the line">{r.move <= 0 ? 'award terms' : `≤ ${unit(r.theirUnit * (1 - r.move - 0.005))}`}</span>
+                                                )}
+                                            </td>
+                                            <td className="num">{money(r.award)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {rows.length > 200 && <div className="table-foot">Showing the first 200 of {rows.length} lines.</div>}
+                        {!rows.length && <div className="table-foot">{scanning ? 'Scanning competing offers…' : 'No lines in this view.'}</div>}
+                    </div>
                 </div>
             )}
         </section>
     );
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'primary' | 'green' }) {
+function Kpi({ label, value, sub, subNode, loading }: { label: string; value: string; sub?: string; subNode?: React.ReactNode; loading?: boolean }) {
     return (
-        <div className={`kpi${tone ? ` kpi--${tone}` : ''}`}>
-            <div className="kpi-label">{label}</div>
-            <div className="kpi-value">{value}</div>
-            {sub && <div className="kpi-sub">{sub}</div>}
+        <div className={`kpi${loading ? ' loading' : ''}`}>
+            <span className="label">{label}</span>
+            <span className="value">{value}</span>
+            {(subNode || sub) && <span className="sub">{subNode ?? sub}</span>}
         </div>
     );
 }
