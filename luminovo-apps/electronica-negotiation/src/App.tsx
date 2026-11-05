@@ -145,7 +145,7 @@ export function App() {
         const byValue = new Map(d.lines.map((l) => [l.id, l.total]));
         ids.sort((a, b) => (byValue.get(b) ?? 0) - (byValue.get(a) ?? 0));
         const batches: string[][] = [];
-        for (let i = 0; i < ids.length; i += 20) batches.push(ids.slice(i, i + 20));
+        for (let i = 0; i < ids.length; i += 10) batches.push(ids.slice(i, i + 10));
         setCompProgress({ done: 0, total: ids.length });
         let next = 0;
         const run = async () => {
@@ -164,7 +164,7 @@ export function App() {
                 setCompProgress((p) => ({ ...p, done: Math.min(p.total, p.done + batch.length) }));
             }
         };
-        await Promise.all([run(), run(), run()]);
+        await Promise.all([run(), run(), run(), run()]);
     }
 
     async function loadPortfolio() {

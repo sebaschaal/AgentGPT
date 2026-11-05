@@ -184,13 +184,21 @@ const KEEP_TAGS = new Set([
 ]);
 
 async function competition(input: Json) {
-    const lineIds: string[] = (input.lineIds ?? []).filter((x: string) => uuidRe.test(x)).slice(0, 25);
+    const lineIds: string[] = (input.lineIds ?? []).filter((x: string) => uuidRe.test(x)).slice(0, 12);
     const perLine = await pool(lineIds, 6, async (id) => {
         try {
-            const sols: Json[] = await getJson(`/sourcing-line-item/${id}/solutions`, 'solutions');
-            return { id, sols };
+            const all: Json[] = await getJson(`/sourcing-line-item/${id}/solutions`, 'solutions');
+            // Keep the selected solution and the 120 cheapest valid ones: some passives carry hundreds.
+            const valid = all.filter((s) => {
+                const tags: string[] = (s.tags ?? []).map((t: Json) => t.tag);
+                return tags.includes('Selected') || !tags.some((t) => DROP.has(t));
+            });
+            const price = (s: Json) => num(s.cost?.total_price?.preferred?.amount) || Number.MAX_VALUE;
+            valid.sort((a, b) => price(a) - price(b));
+            const sols = valid.filter((s, i) => i < 120 || (s.tags ?? []).some((t: Json) => t.tag === 'Selected'));
+            return { id, sols, count: all.length };
         } catch (e) {
-            return { id, sols: [] as Json[] };
+            return { id, sols: [] as Json[], count: 0 };
         }
     });
     const offerKeys = new Set<string>();
@@ -201,8 +209,9 @@ async function competition(input: Json) {
         }
     const supplierOf = new Map<string, string>();
     const keys = [...offerKeys];
-    for (let i = 0; i < keys.length; i += 100) {
-        const chunk = keys.slice(i, i + 100);
+    const chunks: string[][] = [];
+    for (let i = 0; i < keys.length; i += 100) chunks.push(keys.slice(i, i + 100));
+    await pool(chunks, 5, async (chunk) => {
         try {
             const res = await call(
                 `${PUBLIC_API}/offers/bulk`,
@@ -221,8 +230,8 @@ async function competition(input: Json) {
         } catch (e) {
             console.error('offer resolve failed', e);
         }
-    }
-    const lines = perLine.map(({ id, sols }) => {
+    });
+    const lines = perLine.map(({ id, sols, count }) => {
         const best = new Map<string, Json>();
         for (const s of sols) {
             const tags: string[] = (s.tags ?? []).map((t: Json) => t.tag);
@@ -246,8 +255,8 @@ async function competition(input: Json) {
             const prev = best.get(supplier);
             if (!prev || selected || (!prev.selected && total < prev.total)) best.set(supplier, opt);
         }
-        const options = [...best.values()].sort((a, b) => a.total - b.total).slice(0, 10);
-        return { id, options, count: sols.length };
+        const options = [...best.values()].sort((a, b) => a.total - b.total).slice(0, 12);
+        return { id, options, count };
     });
     return json({ lines });
 }
