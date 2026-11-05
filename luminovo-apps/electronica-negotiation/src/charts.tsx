@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { money, pct } from './format';
 import type { SimPoint } from './model';
 
@@ -9,15 +9,35 @@ interface ConcessionProps {
     sweet: SimPoint;
     max: number;
     sweetLabel: string;
+    width?: number; // viewBox width: match the rendered width so text stays at its real size
 }
 
-const W = 860;
-const H = 300;
+const DEFAULT_W = 860;
 const PAD = { l: 64, r: 18, t: 22, b: 34 };
 
 // Diverging view of the trade-off: volume they win above the axis, what they give back on held lines below,
 // and the net change as a line.
-export function ConcessionChart({ points, d, onChange, sweet, max, sweetLabel }: ConcessionProps) {
+export function ConcessionChart(props: ConcessionProps) {
+    // Draw at the container's real width so labels stay 12px on a phone and on a wide screen alike.
+    const box = useRef<HTMLDivElement>(null);
+    const [w, setW] = useState(props.width ?? DEFAULT_W);
+    useEffect(() => {
+        const el = box.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(([e]) => setW(Math.max(300, Math.round(e.contentRect.width))));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+    return (
+        <div ref={box} className="chart-box">
+            <ConcessionSvg {...props} width={w} />
+        </div>
+    );
+}
+
+function ConcessionSvg({ points, d, onChange, sweet, max, sweetLabel, width = DEFAULT_W }: ConcessionProps) {
+    const W = width;
+    const H = W < 520 ? 220 : 300;
     const ref = useRef<SVGSVGElement>(null);
     const up = Math.max(1, ...points.map((p) => p.gained)) * 1.15;
     const down = Math.max(...points.map((p) => p.giveBack), 0) * 1.15;
@@ -28,7 +48,7 @@ export function ConcessionChart({ points, d, onChange, sweet, max, sweetLabel }:
         `M ${x(points[0].d)},${y(0)} ` + points.map((p) => `L ${x(p.d)},${y(get(p))}`).join(' ') + ` L ${x(points[points.length - 1].d)},${y(0)} Z`;
     const line = (get: (p: SimPoint) => number) => `M ${points.map((p) => `${x(p.d)},${y(get(p))}`).join(' L ')}`;
     const cur = points.reduce((a, p) => (Math.abs(p.d - d) < Math.abs(a.d - d) ? p : a), points[0]);
-    const ticksX = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3].filter((t) => t <= max + 1e-9);
+    const ticksX = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3].filter((t) => t <= max + 1e-9 && (W >= 520 || Math.round(t * 100) % 10 === 0));
     const step = niceStep(span / 4);
     const ticksY: number[] = [];
     for (let v = -Math.floor(down / step) * step; v <= up; v += step) ticksY.push(v);

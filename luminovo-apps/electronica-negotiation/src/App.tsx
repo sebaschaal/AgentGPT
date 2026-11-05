@@ -176,14 +176,22 @@ export function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rfqId, scenarioId, selected]);
 
-    async function scanCompetition(d: ProjectData, signal: AbortSignal) {
-        const ids = d.lines.filter((l) => l.total > 0 || l.supplier).map((l) => l.id);
-        // Biggest lines first, so the analysis is useful before the scan finishes.
+    // Large BOMs: scan the biggest lines first and stop once they cover nearly all of the spend.
+    const SCAN_CAP = 300;
+    const [scanSkipped, setScanSkipped] = useState<{ lines: number; spend: number } | null>(null);
+
+    async function scanCompetition(d: ProjectData, signal: AbortSignal, only?: string[]) {
         const byValue = new Map(d.lines.map((l) => [l.id, l.total]));
-        ids.sort((a, b) => (byValue.get(b) ?? 0) - (byValue.get(a) ?? 0));
+        const all = d.lines.filter((l) => l.total > 0 || l.supplier).map((l) => l.id);
+        all.sort((a, b) => (byValue.get(b) ?? 0) - (byValue.get(a) ?? 0));
+        const ids = only ?? all.slice(0, SCAN_CAP);
+        if (!only) {
+            const rest = all.slice(ids.length);
+            setScanSkipped(rest.length ? { lines: rest.length, spend: rest.reduce((s, id) => s + (byValue.get(id) ?? 0), 0) } : null);
+        } else setScanSkipped(null);
         const batches: string[][] = [];
         for (let i = 0; i < ids.length; i += 10) batches.push(ids.slice(i, i + 10));
-        setCompProgress({ done: 0, total: ids.length });
+        setCompProgress((p) => (only ? { done: p.done, total: p.total + ids.length } : { done: 0, total: ids.length }));
         let next = 0;
         const run = async () => {
             while (next < batches.length && !signal.aborted) {
@@ -202,6 +210,13 @@ export function App() {
             }
         };
         await Promise.all([run(), run(), run(), run()]);
+    }
+
+    function scanRemaining() {
+        if (!data) return;
+        const ctrl = ctrlRef.current ?? new AbortController();
+        const rest = data.lines.filter((l) => (l.total > 0 || l.supplier) && !comp.has(l.id)).map((l) => l.id);
+        scanCompetition(data, ctrl.signal, rest);
     }
 
     async function loadPortfolio() {
@@ -615,7 +630,18 @@ export function App() {
                                     <b>1</b> Spend by stand from the selected offers
                                 </div>
                                 <div className={compDone ? 'done' : ''}>
-                                    <b>2</b> Competing offers on every line ({compProgress.done}/{compProgress.total})
+                                    <b>2</b>
+                                    <span>
+                                        Competing offers on {scanSkipped ? `the ${compProgress.total} largest lines` : 'every line'} ({compProgress.done}/{compProgress.total})
+                                        {scanSkipped && (
+                                            <>
+                                                {' '}
+                                                <button className="link linkish" onClick={scanRemaining}>
+                                                    Scan the other {scanSkipped.lines} ({money(scanSkipped.spend)})
+                                                </button>
+                                            </>
+                                        )}
+                                    </span>
                                 </div>
                                 <div className={portfolioProgress.total > 0 && portfolioProgress.done >= portfolioProgress.total ? 'done' : ''}>
                                     <b>3</b> Selected spend across the last {portfolioProgress.total || 60} active projects ({portfolioProgress.done}/{portfolioProgress.total || '…'})

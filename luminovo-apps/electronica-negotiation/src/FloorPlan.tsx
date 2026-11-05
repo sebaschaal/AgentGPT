@@ -45,6 +45,16 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
     const [hoverHall, setHoverHall] = useState<string | null>(null);
     const [tourIdx, setTourIdx] = useState<number | null>(null);
     const tourTimer = useRef<number | null>(null);
+    // The floor is laid out 1000 units wide: on a phone or tablet the camera zooms out to fit the stage.
+    const stageRef = useRef<HTMLDivElement>(null);
+    const [fit, setFit] = useState(1);
+    useEffect(() => {
+        const el = stageRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(([entry]) => setFit(Math.min(1, entry.contentRect.width / 1150)));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
 
     // Flyover on first paint, and again whenever the project changes.
     const signature = suppliers.map((s) => s.supplier).join('|');
@@ -153,14 +163,14 @@ export function FloorPlan({ suppliers, halls, total, selected, onSelect, route, 
     }
     useEffect(() => stopTour, []);
 
-    const floorTransform = `translate(-50%, -50%) rotateX(${cam.rx}deg) rotateZ(${cam.rz}deg) scale(${cam.s}) translate(${FLOOR_W / 2 - cam.cx}px, ${FLOOR_H / 2 - cam.cy}px)`;
+    const floorTransform = `translate(-50%, -50%) rotateX(${cam.rx}deg) rotateZ(${cam.rz}deg) scale(${cam.s * fit}) translate(${FLOOR_W / 2 - cam.cx}px, ${FLOOR_H / 2 - cam.cy}px)`;
     const billboard = `rotateZ(${-cam.rz}deg) rotateX(${-cam.rx}deg)`;
     const tourStop = tourIdx !== null && route ? route[tourIdx] : null;
     const daysToFair = Math.ceil((new Date(FAIR.start).getTime() - Date.now()) / 86400000);
     const atFair = onFloor.reduce((s, x) => s + x.spend, 0);
 
     return (
-        <div className="stage">
+        <div className="stage" ref={stageRef}>
             <div className="stage-grid" />
             <div className="floor" style={{ transform: floorTransform, width: FLOOR_W, height: FLOOR_H }}>
                 <div className="floor-ground" />

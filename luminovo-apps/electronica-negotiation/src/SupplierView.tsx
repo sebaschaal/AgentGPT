@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNotify } from '@luminovo/widget-sdk';
-import { Copy, MessageSquareQuote, Sparkles, X } from 'lucide-react';
+import { Copy, MessageSquareQuote, Presentation, Sparkles, X } from 'lucide-react';
+import { PitchView } from './PitchView';
 import { call, describeError } from './api';
 import { ConcessionChart, GapBuckets, MoveBar } from './charts';
 import { initials, money, pct, qty, signedPct, unit } from './format';
@@ -63,6 +64,7 @@ export function SupplierView(p: Props) {
     const points = useMemo(() => curve(a, mode), [a, mode]);
     const sweet = useMemo(() => sweetSpot(points, mode), [points, mode]);
     const [touched, setTouched] = useState(false);
+    const [presenting, setPresenting] = useState(false);
     const sim = simulate(a, d, mode);
     const bks = useMemo(() => buckets(a), [a]);
     const within10 = withinVolume(a, 0.1);
@@ -74,6 +76,7 @@ export function SupplierView(p: Props) {
         setBucket(null);
         setFilter('all');
         setTouched(false);
+        setPresenting(false);
     }, [supplier.supplier]);
 
     // Start the simulator on the supplier's best move; refine it while the scan fills in, until the user takes over.
@@ -182,6 +185,20 @@ export function SupplierView(p: Props) {
     const notQuotedVolume = a.notQuoted.reduce((s, n) => s + n.award, 0);
     const nearLines = a.contestable.filter((c) => c.move > 0 && c.move <= 0.1).length;
 
+    if (presenting)
+        return (
+            <PitchView
+                supplier={supplier.supplier}
+                projectName={p.projectName}
+                a={a}
+                mode={mode}
+                d={d}
+                onMode={(m) => (setTouched(true), setMode(m))}
+                onMove={moveTo}
+                onClose={() => setPresenting(false)}
+            />
+        );
+
     return (
         <section className="supplier">
             <header className="sup-head">
@@ -209,6 +226,10 @@ export function SupplierView(p: Props) {
                     </div>
                     <h2>{supplier.supplier}</h2>
                 </div>
+                <button className="btn btn-secondary" onClick={() => setPresenting(true)} disabled={a.covered === 0} title="A screen to show the supplier: their volume and the price that wins each line, without competitor names">
+                    <Presentation />
+                    Present to supplier
+                </button>
                 <button className="btn btn-ghost btn-icon" onClick={p.onClose} aria-label="Back to the floor plan" title="Back to the floor plan">
                     <X />
                 </button>

@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
   const out = process.argv[2] || 'shot';
   const actions = process.argv.slice(3);
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width: Number(process.env.W || 1440), height: Number(process.env.H || 1000) }, deviceScaleFactor: 1 });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push('PAGEERROR ' + e.message));
